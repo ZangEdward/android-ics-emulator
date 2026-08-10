@@ -1,2 +1,4 @@
 .workbuddy/
-*.log
+reference/
+tools/
+_*.html

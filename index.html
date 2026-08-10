@@ -56,44 +56,49 @@
   /* wallpaper-visible screens (lock / home) — keep transparent so wallpaper shows */
   .wall{background:transparent;}
 
-  /* ===== lock screen (ICS 4.0 unlock_portrait/unlock_landscape: clock LEFT-center, date below, handle RIGHT-center, slide right to unlock) ===== */
-  #lock{flex-direction:column;}
+  /* ===== lock screen (ICS 4.0 keyguard_screen_unlock_landscape: clock LEFT-center, date below, status below, handle RIGHT-center, slide right to unlock) ===== */
+  #lock{flex-direction:column;position:relative;}
   #lock.on{animation:lockIn .4s cubic-bezier(.2,.7,.3,1);}
   @keyframes lockIn{from{opacity:0}to{opacity:1}}
-  #lock .lock-clock,#lock .lock-date{animation:lockUp .5s cubic-bezier(.2,.7,.3,1);}
+  #lock .lock-clock,#lock .lock-date,#lock .lock-status{animation:lockUp .5s cubic-bezier(.2,.7,.3,1);}
   @keyframes lockUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
-  #lock .mwv,#lock .lock-carrier{animation:lockRing .55s cubic-bezier(.2,.7,.3,1) .08s backwards;}
-  @keyframes lockRing{from{opacity:0;transform:scale(.82)}to{opacity:1;transform:scale(1)}}
-  /* clock sits in the LEFT-CENTER of the screen (as on real ICS 4.0 slide-to-unlock) */
-  #lock{flex-direction:column;position:relative;}
+  /* handle gets a subtle pop-in but DOES NOT override the natural translateY(-50%) positioning */
+  #lock .lock-handle{animation:lockHand .42s cubic-bezier(.2,.7,.3,1) .08s backwards;}
+  @keyframes lockHand{from{opacity:0}to{opacity:1}}
+
+  /* clock + date + status sit on the LEFT, vertically centered — matches real ICS 4.0 keyguard_unlock_landscape */
   .lock-clock{position:absolute;left:30px;top:38%;font-size:62px;font-weight:200;letter-spacing:1px;line-height:1;
     color:#fff;text-align:left;text-shadow:0 1px 6px rgba(0,0,0,.55);}
-  .lock-date{position:absolute;left:30px;top:calc(38% + 74px);font-size:15px;color:rgba(255,255,255,.92);
+  .lock-date{position:absolute;left:30px;top:calc(38% + 64px);font-size:15px;color:rgba(255,255,255,.92);
     text-align:left;text-shadow:0 1px 3px rgba(0,0,0,.5);}
-  .lock-space{flex:1;}
-  .lock-ringzone{position:absolute;left:0;right:0;top:0;bottom:0;}
-  /* slide-to-unlock handle: real AOSP ic_lockscreen_handle_normal.png (transparent circle + white ring + lock), RIGHT-CENTER */
-  .mwv{position:absolute;left:0;right:0;top:0;bottom:0;}
-  .mwv-handle{position:absolute;left:74%;top:50%;width:84px;height:84px;margin:-42px 0 0 -42px;
+  .lock-status{position:absolute;left:30px;top:calc(38% + 90px);font-size:13px;color:rgba(255,255,255,.85);
+    text-align:left;text-shadow:0 1px 3px rgba(0,0,0,.5);}
+
+  /* handle: pure CSS ring + inline SVG lock icon, RIGHT-CENTER, slide right to unlock (no multiwave, no targets) */
+  .lock-handle{position:absolute;right:48px;top:50%;transform:translateY(-50%);width:88px;height:88px;
     display:flex;align-items:center;justify-content:center;cursor:grab;touch-action:none;z-index:3;
     transition:transform .22s cubic-bezier(.2,.7,.3,1);will-change:transform;}
-  .mwv-handle img{width:84px;height:84px;pointer-events:none;}
-  .mwv-handle.dragging{transition:none;cursor:grabbing;}
-  /* unlock guide that pops out while the handle is pressed (AOSP chevron + text) */
-  .mwv-hint{position:absolute;right:calc(100% + 16px);top:50%;transform:translateY(-50%);
-    display:flex;align-items:center;gap:8px;opacity:0;pointer-events:none;white-space:nowrap;
-    transition:opacity .18s ease, transform .18s ease;}
-  .mwv-hint img{width:16px;height:60px;animation:hintPulse 1.1s ease-in-out infinite;}
-  .mwv-hint span{font-size:15px;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.6);}
-  .mwv-hint.show{opacity:1;}
-  @keyframes hintPulse{0%,100%{opacity:.55}50%{opacity:1}}
-  /* wave guide ellipse: appears while handle is pressed/dragged (real ICS: wave pops when you touch the handle) */
-  .mwv-wave{position:absolute;left:74%;top:50%;width:300px;height:60px;margin:-30px 0 0 -150px;
-    border:2px solid rgba(255,255,255,.35);border-radius:50%;opacity:0;pointer-events:none;
-    transition:opacity .18s ease, left .05s linear;transform-origin:50% 50%;}
-  .mwv-wave.show{opacity:1;}
-  .lock-carrier{position:absolute;left:0;right:0;bottom:20px;text-align:center;font-size:13px;
-    color:rgba(255,255,255,.85);text-shadow:0 1px 4px rgba(0,0,0,.45);}
+  .lock-handle svg{width:88px;height:88px;display:block;pointer-events:none;
+    filter:drop-shadow(0 0 2px rgba(0,0,0,.85)) drop-shadow(0 1px 4px rgba(0,0,0,.6));}
+  .lock-handle.dragging{transition:none;cursor:grabbing;}
+
+  /* pull-down wave: single expanding ring, appears ON PRESS only (SlideLockTab wave), never static */
+  .lock-press-wave{position:absolute;right:48px;top:50%;width:84px;height:84px;margin:0;border:2px solid rgba(255,255,255,.55);
+    border-radius:50%;pointer-events:none;transform:translateY(-50%) scale(1);opacity:0;will-change:transform,opacity;
+    transition:transform .25s ease-out,opacity .25s ease-out;}
+  .lock-press-wave.on{opacity:0;transform:translateY(-50%) scale(2.4);transition:transform .55s cubic-bezier(.2,.7,.3,1),opacity .55s ease-out;}
+
+  /* unlock guide chevron + text — visible idle, fades when dragging */
+  .lock-hint{position:absolute;right:12px;top:50%;transform:translate(0,-50%);display:flex;align-items:center;gap:6px;
+    opacity:.78;pointer-events:none;white-space:nowrap;transition:opacity .18s;}
+  .lock-hint.hide{opacity:0;}
+  .lock-hint img{width:14px;height:42px;}
+  .lock-hint span{font-size:13px;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.6);}
+
+  /* bottom-right network status ("未连接互联网 ▲▽")  */
+  .lock-net{position:absolute;right:14px;bottom:18px;display:flex;align-items:center;gap:8px;
+    font-size:13px;color:rgba(255,255,255,.9);text-shadow:0 1px 4px rgba(0,0,0,.6);pointer-events:none;}
+  .lock-net svg{width:18px;height:18px;fill:#fff;opacity:.9;}
 
   /* ===== home / launcher (ICS Launcher2 DragLayer: qsb top, 5-page workspace, dock divider, hotseat) ===== */
   #home{background:transparent;}
@@ -560,21 +565,35 @@
       <span id="sbClock">18:50</span>
     </div>
 
-    <!-- LOCK (ICS 4.0 unlock_portrait: clock left-center, date below, handle right-center, slide-right to unlock) -->
+    <!-- LOCK (ICS 4.0 keyguard_screen_unlock_landscape: clock LEFT-center, date below, status below, handle RIGHT-center, slide right → home) -->
     <div class="screen-page wall on" id="lock">
-      <div class="lock-top">
-        <div class="lock-clock" id="lockTime">22:28</div>
-        <div class="lock-date" id="lockDate">星期日 8月9日</div>
+      <div class="lock-clock" id="lockTime">10:07</div>
+      <div class="lock-date" id="lockDate">8月10日 周一</div>
+      <div class="lock-status" id="lockStatus">已充满.</div>
+      <div class="lock-press-wave" id="lockWave"></div>
+      <div class="lock-handle" id="lockHandle">
+        <svg viewBox="0 0 88 88" id="lockHandleSvg" xmlns="http://www.w3.org/2000/svg">
+          <!-- dark outer ring (contrast against bright wallpaper) -->
+          <circle cx="44" cy="44" r="43" fill="none" stroke="rgba(0,0,0,.55)" stroke-width="6"/>
+          <!-- white ring -->
+          <circle cx="44" cy="44" r="42" fill="none" stroke="#fff" stroke-width="4"/>
+          <!-- inner subtle ring -->
+          <circle cx="44" cy="44" r="37" fill="none" stroke="rgba(0,0,0,.35)" stroke-width="1.5"/>
+          <!-- lock body shadow -->
+          <rect x="30" y="40" width="28" height="22" rx="3" fill="rgba(0,0,0,.45)"/>
+          <rect x="30" y="38" width="28" height="22" rx="3" fill="#fff"/>
+          <!-- shackle shadow -->
+          <path d="M34 41 v-8 a10 10 0 0 1 20 0 v8" fill="none" stroke="rgba(0,0,0,.45)" stroke-width="4.5" stroke-linecap="round"/>
+          <path d="M34 40 v-8 a10 10 0 0 1 20 0 v8" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+          <!-- keyhole -->
+          <circle cx="44" cy="46" r="2.5" fill="#222"/>
+          <rect x="43.05" y="46" width="1.9" height="7" rx=".6" fill="#222"/>
+        </svg>
       </div>
-      <div class="lock-space"></div>
-      <div class="lock-ringzone">
-        <div class="mwv" id="mwv">
-          <div class="mwv-wave" id="mwvWave"></div>
-          <div class="mwv-handle" id="mwvHandle"><img src="assets/ic_lockscreen_handle_normal.png" alt="">
-            <div class="mwv-hint" id="mwvHint"><img src="assets/ic_lockscreen_chevron_right.png" alt=""><span>向右滑动解锁</span></div>
-          </div>
-        </div>
-        <div class="lock-carrier">中国移动</div>
+      <div class="lock-hint" id="lockHint"><img src="assets/ic_lockscreen_chevron_right.png" alt=""><span>向右滑动解锁</span></div>
+      <div class="lock-net">
+        <span id="lockNetText">未连接互联网</span>
+        <svg viewBox="0 0 24 24"><path d="M9 6l-6 6 1.4 1.4L9 8.8V18h2V8.8l4.6 4.6L17 12l-6-6H9zM3 4l1.4-1.4L9 7.2 13.6 2.6 15 4l-6 6-6-6z" fill="currentColor" opacity=".0"/><path d="M7 14l5-5 5 5H7z" fill="#fff" opacity=".9"/></svg>
       </div>
     </div>
 
@@ -1384,37 +1403,50 @@
   /* ---- clock ---- */
   function tick(){const d=new Date();const p=n=>String(n).padStart(2,'0');const s=p(d.getHours())+':'+p(d.getMinutes());
     $('#sbClock').textContent=s;$('#lockTime').textContent=s;
-    const w='日一二三四五六'[d.getDay()];const date='星期'+w+' '+(d.getMonth()+1)+'月'+d.getDate()+'日';
-    $('#lockDate').textContent=date;
-    const nd=$('#notifDate'); if(nd)nd.textContent=date;}
+    const w='日一二三四五六'[d.getDay()];const date=(d.getMonth()+1)+'月'+d.getDate()+'日 周'+w;
+    const wdate='星期'+w+' '+(d.getMonth()+1)+'月'+d.getDate()+'日';
+    $('#lockDate').textContent=date;$('#lockStatus').textContent='已充满.';
+    const nd=$('#notifDate'); if(nd)nd.textContent=wdate;}
   tick();setInterval(tick,10000);
 
-  /* ---- lock slide-to-unlock (ICS 4.0 unlock_portrait: handle right-center, drag RIGHT to unlock, wave+guide pops while pressed) ---- */
-  const mHandle=$('#mwvHandle'),mHint=$('#mwvHint'),mWave=$('#mwvWave');
-  let drag=false,sx=0,dx=0;const pt=e=>e.touches?e.touches[0]:e;
-  const UNLOCK=70; // px rightward to trigger unlock
-  function setHandleImg(pressed){mHandle.querySelector('img').src=pressed?'assets/ic_lockscreen_handle_pressed.png':'assets/ic_lockscreen_handle_normal.png';}
-  function setHint(on){mHint.classList.toggle('show',on);mWave.classList.toggle('show',on);}
+  /* ---- lock screen slide-to-unlock (ICS 4.0 keyguard_screen_unlock_landscape: handle RIGHT-center, drag RIGHT to unlock) ---- */
+  const lh=$('#lockHandle'),lhSvg=$('#lockHandleSvg'),lw=$('#lockWave'),lHint=$('#lockHint');
+  let lDrag=false,lsx=0,ldx=0;const pt2=e=>e.touches?e.touches[0]:e;
+  const LTRIP=70,LMAX=180; // px threshold to unlock / max drag distance
+  function setHandleImg(p){
+    if(!lhSvg) return;
+    const ring = p?'rgba(255,255,255,1)':'rgba(255,255,255,.92)';
+    const inner = p?'rgba(255,255,255,.18)':'rgba(255,255,255,.05)';
+    const body = p?'rgba(255,255,255,1)':'rgba(255,255,255,.95)';
+    lhSvg.querySelector('circle:nth-of-type(1)').setAttribute('stroke',ring);
+    lhSvg.querySelector('circle:nth-of-type(2)').setAttribute('fill',inner);
+    lhSvg.querySelector('path').setAttribute('stroke', body);
+    lhSvg.querySelector('rect').setAttribute('fill', body);
+  }
   function applyDrag(){
-    const d=Math.max(0,Math.min(180,dx)); // slide only rightward
-    mHandle.style.transform=`translate(${d}px,0)`;
-    mWave.style.left=`calc(74% + ${d}px)`; // wave follows the handle
+    // real AOSP: handle ring is vertical-centered, only moves horizontally toward the right edge
+    const d=Math.max(0,Math.min(LMAX,ldx));
+    lh.style.transform=`translate(0,-50%) translateX(${d}px)`;
+    lHint.classList.toggle('hide',d>8);
   }
-  function startDrag(e){drag=true;sx=pt(e).clientX;setHandleImg(true);setHint(true);mHandle.classList.add('dragging');mHandle.style.transition='none';applyDrag();}
-  function mv(e){if(!drag)return;dx=pt(e).clientX-sx;applyDrag();if(e.cancelable)e.preventDefault();}
-  function endDrag(){if(!drag)return;drag=false;setHandleImg(false);setHint(false);
-  const d=dx;dx=0;
-  mHandle.classList.remove('dragging');mHandle.style.transition='';
-  mWave.style.left='74%';
-  if(d>UNLOCK){fly(200,()=>show('home'));}
-  else mHandle.style.transform='';
+  function lStart(e){lDrag=true;lsx=pt2(e).clientX;setHandleImg(true);lh.classList.add('dragging');lh.style.transition='none';
+    lw.classList.remove('on');void lw.offsetWidth;lw.classList.add('on'); // re-trigger wave anim
+    applyDrag();}
+  function lMove(e){if(!lDrag)return;ldx=pt2(e).clientX-lsx;applyDrag();if(e.cancelable)e.preventDefault();}
+  function lEnd(){if(!lDrag)return;lDrag=false;setHandleImg(false);lh.classList.remove('dragging');lh.style.transition='';
+    const d=ldx;ldx=0;lh.style.transform='';lHint.classList.remove('hide');
+    if(d>LTRIP){lh.style.transition='transform .28s,opacity .28s';lh.style.transform='translate(0,-50%) translateX(280px)';lh.style.opacity='0';
+      setTimeout(()=>{show('home');lh.style.transition='';lh.style.transform='';lh.style.opacity='1';},300);
+    } else {
+      lh.style.transition='transform .28s cubic-bezier(.2,.7,.3,1)';
+      lh.style.transform='translate(0,-50%) translateX(0)';
+      setTimeout(()=>{lh.style.transition='';lh.style.transform='';},320);
+    }
   }
-  mHandle.addEventListener('mousedown',startDrag);
-  mHandle.addEventListener('touchstart',startDrag,{passive:true});
-  window.addEventListener('mousemove',mv);window.addEventListener('touchmove',mv,{passive:false});
-  window.addEventListener('mouseup',endDrag);window.addEventListener('touchend',endDrag);
-  function fly(d,act){mHandle.style.transition='transform .25s,opacity .25s';mHandle.style.transform=`translate(${d}px,0)`;mHandle.style.opacity='0';
-    setTimeout(()=>{act();mHandle.style.transition='';mHandle.style.transform='';mHandle.style.opacity='1';},260);}
+  lh.addEventListener('mousedown',lStart);
+  lh.addEventListener('touchstart',lStart,{passive:true});
+  window.addEventListener('mousemove',lMove);window.addEventListener('touchmove',lMove,{passive:false});
+  window.addEventListener('mouseup',lEnd);window.addEventListener('touchend',lEnd);
 
   /* ===== current screen helper ===== */
   function current(){for(const[k,v]of Object.entries(screens))if(v.classList.contains('on'))return k;return null;}
