@@ -74,8 +74,8 @@
   .lock-status{position:absolute;left:30px;top:calc(38% + 100px);font-size:13px;color:rgba(255,255,255,.85);
     text-align:left;text-shadow:0 1px 3px rgba(0,0,0,.5);font-weight:400;}
 
-  /* handle: SVG ring + filled padlock, RIGHT-CENTER, slide right to unlock (matches AOSP slide-to-unlock) */
-  .lock-handle{position:absolute;right:42px;top:50%;transform:translateY(-50%);width:92px;height:92px;
+  /* handle: SVG ring + filled padlock, RIGHT-CENTER, drag LEFT to unlock (AOSP slide-to-unlock landscape) */
+  .lock-handle{position:absolute;right:155px;top:46%;transform:translateY(-50%);width:92px;height:92px;
     display:flex;align-items:center;justify-content:center;cursor:grab;touch-action:none;z-index:3;
     transition:transform .22s cubic-bezier(.2,.7,.3,1);will-change:transform;}
   .lock-handle svg{width:92px;height:92px;display:block;pointer-events:none;
@@ -83,7 +83,7 @@
   .lock-handle.dragging{transition:none;cursor:grabbing;}
 
   /* pull-down wave: single expanding ring, appears ON PRESS only (SlideLockTab wave), never static */
-  .lock-press-wave{position:absolute;right:42px;top:50%;width:92px;height:92px;border-radius:50%;
+  .lock-press-wave{position:absolute;right:155px;top:46%;width:92px;height:92px;border-radius:50%;
     border:2px solid rgba(255,255,255,.5);pointer-events:none;transform:translateY(-50%) scale(1);
     opacity:0;will-change:transform,opacity;transition:transform .25s ease-out,opacity .25s ease-out;}
   .lock-press-wave.on{opacity:0;transform:translateY(-50%) scale(2.4);transition:transform .55s cubic-bezier(.2,.7,.3,1),opacity .55s ease-out;}
@@ -92,14 +92,8 @@
   .lock-hint{position:absolute;right:14px;bottom:118px;display:flex;align-items:center;gap:6px;
     opacity:0;pointer-events:none;white-space:nowrap;transition:opacity .22s,transform .22s;
     transform:translateX(8px);font-size:12px;color:rgba(255,255,255,.85);text-shadow:0 1px 4px rgba(0,0,0,.6);}
-  .lock-hint img{width:9px;height:32px;opacity:.85;}
+  .lock-hint img{width:9px;height:32px;opacity:.85;transform:scaleX(-1);}
   .lock-hint.show{opacity:1;transform:translateX(0);}
-
-  /* bottom-right network status ("未连接互联网 ▲") — two thin up-arrows like AOSP CS */
-  .lock-net{position:absolute;right:14px;bottom:18px;display:flex;align-items:center;gap:8px;
-    font-size:13px;color:rgba(255,255,255,.9);text-shadow:0 1px 4px rgba(0,0,0,.6);pointer-events:none;}
-  .lock-net svg{width:16px;height:16px;stroke:#fff;stroke-width:1.6;fill:none;opacity:.95;
-    stroke-linecap:round;stroke-linejoin:round;}
 
   /* ===== home / launcher (ICS Launcher2 DragLayer: qsb top, 5-page workspace, dock divider, hotseat) ===== */
   #home{background:transparent;}
@@ -566,7 +560,7 @@
       <span id="sbClock">18:50</span>
     </div>
 
-    <!-- LOCK (ICS 4.0 keyguard_screen_unlock_landscape: clock LEFT-center, date below, status below, handle RIGHT-center, slide right → home) -->
+    <!-- LOCK (ICS 4.0 keyguard_screen_unlock_landscape: clock LEFT-center, date below, status below, handle RIGHT-center, drag LEFT to unlock) -->
     <div class="screen-page wall on" id="lock">
       <div class="lock-clock" id="lockTime">10:07</div>
       <div class="lock-date" id="lockDate">8月10日 周一</div>
@@ -592,14 +586,7 @@
           <rect x="43.05" y="52" width="1.9" height="7" rx=".9" fill="#222"/>
         </svg>
       </div>
-      <div class="lock-hint" id="lockHint"><img src="assets/ic_lockscreen_chevron_right.png" alt=""><span>向右滑动解锁</span></div>
-      <div class="lock-net">
-        <span id="lockNetText">未连接互联网</span>
-        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-          <path d="M6 12 l6 -7 l6 7"/>
-          <path d="M9 16 l3 -3.5 l3 3.5"/>
-        </svg>
-      </div>
+      <div class="lock-hint" id="lockHint"><img src="assets/ic_lockscreen_chevron_right.png" alt=""><span>向左滑动解锁</span></div>
     </div>
 
     <!-- HOME -->
@@ -1414,7 +1401,7 @@
     const nd=$('#notifDate'); if(nd)nd.textContent=wdate;}
   tick();setInterval(tick,10000);
 
-  /* ---- lock screen slide-to-unlock (ICS 4.0 keyguard_screen_unlock_landscape: handle RIGHT-center, drag RIGHT to unlock) ---- */
+  /* ---- lock screen slide-to-unlock (ICS 4.0 keyguard_screen_unlock_landscape: handle RIGHT-center, drag LEFT to unlock) ---- */
   const lh=$('#lockHandle'),lhSvg=$('#lockHandleSvg'),lw=$('#lockWave'),lHint=$('#lockHint');
   let lDrag=false,lsx=0,ldx=0;const pt2=e=>e.touches?e.touches[0]:e;
   const LTRIP=70,LMAX=180; // px threshold to unlock / max drag distance
@@ -1429,17 +1416,17 @@
     lhSvg.querySelector('rect').setAttribute('fill', body);
   }
   function applyDrag(){
-    // real AOSP: handle ring is vertical-centered, only moves horizontally toward the right edge
-    const d=Math.max(0,Math.min(LMAX,ldx));
-    lh.style.transform=`translate(0,-50%) translateX(${d}px)`;
+    // real AOSP: handle is right-center, you drag it LEFT (toward screen center) to unlock
+    const d=Math.max(0,Math.min(LMAX,-ldx));
+    lh.style.transform=`translate(0,-50%) translateX(${-d}px)`;
   }
   function lStart(e){lDrag=true;lsx=pt2(e).clientX;setHandleImg(true);lh.classList.add('dragging');lh.style.transition='none';
     lw.classList.remove('on');void lw.offsetWidth;lw.classList.add('on'); // re-trigger wave anim
     lHint.classList.add('show');applyDrag();}
   function lMove(e){if(!lDrag)return;ldx=pt2(e).clientX-lsx;applyDrag();if(e.cancelable)e.preventDefault();}
   function lEnd(){if(!lDrag)return;lDrag=false;setHandleImg(false);lh.classList.remove('dragging');lh.style.transition='';
-    const d=ldx;ldx=0;lh.style.transform='';lHint.classList.remove('show');
-    if(d>LTRIP){lh.style.transition='transform .28s,opacity .28s';lh.style.transform='translate(0,-50%) translateX(280px)';lh.style.opacity='0';
+    const d=Math.max(0,-ldx);ldx=0;lh.style.transform='';lHint.classList.remove('show');
+    if(d>LTRIP){lh.style.transition='transform .28s,opacity .28s';lh.style.transform='translate(0,-50%) translateX(-640px)';lh.style.opacity='0';
       setTimeout(()=>{show('home');lh.style.transition='';lh.style.transform='';lh.style.opacity='1';},300);
     } else {
       lh.style.transition='transform .28s cubic-bezier(.2,.7,.3,1)';
