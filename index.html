@@ -56,7 +56,7 @@
   /* wallpaper-visible screens (lock / home) — keep transparent so wallpaper shows */
   .wall{background:transparent;}
 
-  /* ===== lock screen (ICS keyguard_screen_tab_unlock.xml + MultiWaveView) ===== */
+  /* ===== lock screen (ICS 4.0 unlock_portrait/unlock_landscape: clock LEFT-center, date below, handle RIGHT-center, slide right to unlock) ===== */
   #lock{flex-direction:column;}
   #lock.on{animation:lockIn .4s cubic-bezier(.2,.7,.3,1);}
   @keyframes lockIn{from{opacity:0}to{opacity:1}}
@@ -64,45 +64,23 @@
   @keyframes lockUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
   #lock .mwv,#lock .lock-carrier{animation:lockRing .55s cubic-bezier(.2,.7,.3,1) .08s backwards;}
   @keyframes lockRing{from{opacity:0;transform:scale(.82)}to{opacity:1;transform:scale(1)}}
-  /* keyguard_screen_tab_unlock: DigitalClock top-RIGHT (layout_gravity=right, marginTop 22dp, marginRight 42dp),
-     date below it, then Space, MultiWaveView, carrier */
-  .lock-top{display:flex;flex-direction:column;align-items:flex-end;padding:22px 42px 0 0;flex-shrink:0;width:100%;}
-  .lock-clock{font-size:56px;font-weight:200;letter-spacing:1px;line-height:1;color:#fff;text-align:right;text-shadow:0 2px 8px rgba(0,0,0,.45);}
-  .lock-date{font-size:14px;color:rgba(255,255,255,.88);margin-top:6px;text-align:right;text-shadow:0 1px 4px rgba(0,0,0,.45);}
+  /* clock sits in the LEFT-CENTER of the screen (as on real ICS 4.0 slide-to-unlock) */
+  #lock{flex-direction:column;position:relative;}
+  .lock-clock{position:absolute;left:30px;top:38%;font-size:62px;font-weight:200;letter-spacing:1px;line-height:1;
+    color:#fff;text-align:left;text-shadow:0 1px 6px rgba(0,0,0,.55);}
+  .lock-date{position:absolute;left:30px;top:calc(38% + 74px);font-size:15px;color:rgba(255,255,255,.92);
+    text-align:left;text-shadow:0 1px 3px rgba(0,0,0,.5);}
   .lock-space{flex:1;}
-  .lock-ringzone{position:relative;height:280px;flex-shrink:0;margin-bottom:30px;}
-  /* AOSP ICS LockScreen MultiWaveView (real): ONE wave ring = ic_lockscreen_outerring shape oval 270dp.
-     Idle: circle centered on handle. While dragging: the ring FOLLOWS the handle and stretches
-     horizontally (scaleX) into an ellipse — exactly like MultiWaveView.onDraw + mOuterRing scale. */
-  .mwv{position:absolute;left:0;right:0;top:0;bottom:30px;}
-  .mwv-wave{position:absolute;left:50%;top:50%;width:270px;height:270px;margin:-135px 0 0 -135px;
-    border-radius:50%;border:2px solid rgba(26,255,255,.30);pointer-events:none;z-index:1;
-    transition:transform .2s cubic-bezier(.2,.7,.3,1);will-change:transform;}
-  .mwv-wave.drag{transition:none;}
-  /* drag-guide line from handle toward target (extra affordance while dragging) */
-  .mwv-guide{position:absolute;left:50%;top:50%;width:200px;height:50px;margin:-25px 0 0 -100px;
-    border:2px solid rgba(255,255,255,.25);border-radius:50%;opacity:0;pointer-events:none;
-    transform-origin:50% 50%;transform:scaleX(0);transition:opacity .15s;z-index:1;}
-  /* handle: real AOSP ic_lockscreen_handle_normal.png (162x162: transparent circle, white border, lock icon) */
-  .mwv-handle{position:absolute;left:50%;top:50%;width:80px;height:80px;margin:-40px 0 0 -40px;
+  .lock-ringzone{position:absolute;left:0;right:0;top:0;bottom:0;}
+  /* slide-to-unlock handle: real AOSP ic_lockscreen_handle_normal.png (transparent circle + white ring + lock), RIGHT-CENTER */
+  .mwv{position:absolute;left:0;right:0;top:0;bottom:0;}
+  .mwv-handle{position:absolute;left:74%;top:50%;width:84px;height:84px;margin:-42px 0 0 -42px;
     display:flex;align-items:center;justify-content:center;cursor:grab;touch-action:none;z-index:3;
     transition:transform .22s cubic-bezier(.2,.7,.3,1);will-change:transform;}
-  .mwv-handle img{width:80px;height:80px;pointer-events:none;}
+  .mwv-handle img{width:84px;height:84px;pointer-events:none;}
   .mwv-handle.dragging{transition:none;cursor:grabbing;}
-  /* targets: real AOSP ic_lockscreen_camera_normal / unlock_normal 162x162, 135dp offset from center */
-  .mwv-target{position:absolute;top:50%;width:80px;height:80px;margin-top:-40px;
-    display:flex;align-items:center;justify-content:center;z-index:2;transition:transform .18s cubic-bezier(.2,.8,.3,1);
-    opacity:.85;}
-  .mwv-target img{width:80px;height:80px;pointer-events:none;}
-  .mwv-target.l{left:50%;transform:translate(calc(-50% - 135px),-50%);}
-  .mwv-target.r{left:50%;transform:translate(calc(-50% + 135px),-50%);}
-  .mwv-target.hot{transform:translate(-50%,-50%) scale(1.2);opacity:1;}
-  .mwv-target.l.hot{transform:translate(calc(-50% - 135px),-50%) scale(1.2);opacity:1;}
-  .mwv-target.r.hot{transform:translate(calc(-50% + 135px),-50%) scale(1.2);opacity:1;}
-  .mwv-chev{position:absolute;right:18px;top:50%;margin-top:-32px;opacity:0;pointer-events:none;
-    animation:chevHint 1.6s ease .9s forwards;}
-  @keyframes chevHint{0%{opacity:0;transform:translateX(4px)}25%{opacity:.85}70%{opacity:.85}100%{opacity:0;transform:translateX(-4px)}}
-  .mwv-chev img{width:14px;height:54px;}
+  .lock-carrier{position:absolute;left:0;right:0;bottom:20px;text-align:center;font-size:13px;
+    color:rgba(255,255,255,.85);text-shadow:0 1px 4px rgba(0,0,0,.45);}
   .lock-carrier{position:absolute;left:0;right:0;bottom:8px;text-align:center;font-size:13px;
     color:rgba(255,255,255,.85);text-shadow:0 1px 4px rgba(0,0,0,.45);}
 
@@ -571,9 +549,8 @@
       <span id="sbClock">18:50</span>
     </div>
 
-    <!-- LOCK -->
+    <!-- LOCK (ICS 4.0 unlock_portrait: clock left-center, date below, handle right-center, slide-right to unlock) -->
     <div class="screen-page wall on" id="lock">
-      <!-- keyguard_screen_tab_unlock: clock/date top-right, Space, MultiWaveView, carrier -->
       <div class="lock-top">
         <div class="lock-clock" id="lockTime">22:28</div>
         <div class="lock-date" id="lockDate">星期日 8月9日</div>
@@ -581,10 +558,6 @@
       <div class="lock-space"></div>
       <div class="lock-ringzone">
         <div class="mwv" id="mwv">
-          <div class="mwv-wave" id="mwvWave"></div>
-          <div class="mwv-guide" id="mwvGuide"></div>
-          <div class="mwv-target l" id="mwvCam"><img src="assets/ic_lockscreen_camera_normal.png" alt=""></div>
-          <div class="mwv-target r" id="mwvUnlock"><img src="assets/ic_lockscreen_unlock_normal.png" alt=""></div>
           <div class="mwv-handle" id="mwvHandle"><img src="assets/ic_lockscreen_handle_normal.png" alt=""></div>
         </div>
         <div class="lock-carrier">中国移动</div>
@@ -1402,38 +1375,21 @@
     const nd=$('#notifDate'); if(nd)nd.textContent=date;}
   tick();setInterval(tick,10000);
 
-  /* ---- lock MultiWaveView drag (real AOSP 4.0: ONE 270dp wave ring follows handle & stretches into ellipse; right=unlock, LEFT=camera) ---- */
-  const mwv=$('#mwv'),mHandle=$('#mwvHandle'),mUnlock=$('#mwvUnlock'),mCam=$('#mwvCam'),mGuide=$('#mwvGuide'),mWave=$('#mwvWave');
+  /* ---- lock slide-to-unlock (ICS 4.0 unlock_portrait: handle sits right-center, drag RIGHT to unlock, release snaps back) ---- */
+  const mHandle=$('#mwvHandle');
   let drag=false,sx=0,dx=0;const pt=e=>e.touches?e.touches[0]:e;
-  const SNAP=45,MAX=105;
+  const UNLOCK=70; // px rightward to trigger unlock
   function setHandleImg(pressed){mHandle.querySelector('img').src=pressed?'assets/ic_lockscreen_handle_pressed.png':'assets/ic_lockscreen_handle_normal.png';}
-  function setTargetImgs(unlockHot,camHot){
-    mUnlock.querySelector('img').src=unlockHot?'assets/ic_lockscreen_unlock_activated.png':'assets/ic_lockscreen_unlock_normal.png';
-    mCam.querySelector('img').src=camHot?'assets/ic_lockscreen_camera_activated.png':'assets/ic_lockscreen_camera_normal.png';
-    mUnlock.classList.toggle('hot',unlockHot);mCam.classList.toggle('hot',camHot);
-  }
   function applyDrag(){
-    const d=Math.max(-MAX,Math.min(MAX,dx));
+    const d=Math.max(0,Math.min(180,dx)); // slide only rightward
     mHandle.style.transform=`translate(${d}px,0)`;
-    /* real AOSP: wave ring follows handle and scales horizontally into an ellipse */
-    const k=1+Math.abs(d)/MAX*0.55;
-    mWave.style.transform=`translate(${d}px,0) scale(${k},1)`;
-    /* drag-guide affordance line */
-    mGuide.style.opacity=drag?0.85:0;
-    mGuide.style.transformOrigin=d>=0?'left center':'right center';
-    mGuide.style.transform=`scaleX(${0.25+Math.abs(d)/MAX*1.1})`;
-    setTargetImgs(d>SNAP/2,dx<-SNAP/2);
   }
-  function startDrag(e){drag=true;sx=pt(e).clientX;setHandleImg(true);mHandle.classList.add('dragging');mWave.classList.add('drag');mGuide.style.transition='none';mHandle.style.transition='none';mWave.style.transition='none';applyDrag();}
+  function startDrag(e){drag=true;sx=pt(e).clientX;setHandleImg(true);mHandle.classList.add('dragging');mHandle.style.transition='none';applyDrag();}
   function mv(e){if(!drag)return;dx=pt(e).clientX-sx;applyDrag();if(e.cancelable)e.preventDefault();}
-  function endDrag(){if(!drag)return;drag=false;setHandleImg(false);setTargetImgs(false,false);
+  function endDrag(){if(!drag)return;drag=false;setHandleImg(false);
   const d=dx;dx=0;
-  mHandle.classList.remove('dragging');mWave.classList.remove('drag');
-  mHandle.style.transition='';mHandle.style.transform='';
-  mWave.style.transition='';mWave.style.transform='';
-  mGuide.style.transition='';mGuide.style.opacity=0;mGuide.style.transform='scaleX(0)';
-  if(d>SNAP)fly(180,()=>show('home'));
-  else if(d<-SNAP)fly(-180,()=>show('camera'));
+  mHandle.classList.remove('dragging');mHandle.style.transition='';
+  if(d>UNLOCK){fly(200,()=>show('home'));}
   else mHandle.style.transform='';
   }
   mHandle.addEventListener('mousedown',startDrag);
