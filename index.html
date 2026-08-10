@@ -68,29 +68,35 @@
   .lock-clock{font-size:54px;font-weight:200;letter-spacing:1px;line-height:1;color:#fff;text-align:center;text-shadow:0 2px 8px rgba(0,0,0,.45);}
   .lock-date{font-size:13px;color:rgba(255,255,255,.88);margin-top:8px;text-align:center;text-shadow:0 1px 4px rgba(0,0,0,.45);}
   .lock-space{flex:1;}
-  .lock-ringzone{position:relative;height:240px;flex-shrink:0;margin-bottom:40px;}
-  /* MultiWaveView: handle (center) + targets (left/right). Wave/ellipse guide only appears while dragging */
+  .lock-ringzone{position:relative;height:280px;flex-shrink:0;margin-bottom:30px;}
+  /* AOSP ICS LockScreen MultiWaveView: outer ring 270dp ellipse + 2 inner wave ellipses + handle (center) + targets (lr).
+     ic_lockscreen_outerring.xml = shape oval 270dp stroke #1affffff 2dp. */
   .mwv{position:absolute;left:0;right:0;top:0;bottom:30px;}
-  .mwv-ring{position:absolute;left:50%;top:50%;width:150px;height:150px;margin:-75px 0 0 -75px;
-    border-radius:50%;border:2px solid rgba(255,255,255,.10);pointer-events:none;
-    transform:translate(-50%,-50%);}
-  /* drag-guide ellipse: shown only while handle is being dragged (real AOSP behavior) */
+  .mwv-wave{position:absolute;left:50%;top:50%;border:2px solid rgba(255,255,255,.10);border-radius:50%;
+    pointer-events:none;transform:translate(-50%,-50%);}
+  .mwv-wave.outer{width:270px;height:145px;border-color:rgba(26,255,255,.20);}
+  .mwv-wave.inner{width:200px;height:105px;border-color:rgba(26,255,255,.16);}
+  .mwv-wave.inner2{width:130px;height:70px;border-color:rgba(26,255,255,.14);}
+  /* drag guide ellipse: stretches from handle toward target while dragging */
   .mwv-guide{position:absolute;left:50%;top:50%;width:210px;height:54px;margin:-27px 0 0 -105px;
     border:2px solid rgba(255,255,255,.22);border-radius:50%;opacity:0;pointer-events:none;
     transform-origin:50% 50%;transform:scaleX(0);transition:opacity .15s;}
-  .mwv-handle{position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px 0 0 -27px;
+  /* handle: real AOSP ic_lockscreen_handle_normal.png (162x162, white circle + lock icon, 27dp radius = 54dp) */
+  .mwv-handle{position:absolute;left:50%;top:50%;width:80px;height:80px;margin:-40px 0 0 -40px;
     display:flex;align-items:center;justify-content:center;cursor:grab;touch-action:none;z-index:3;
     transition:transform .22s cubic-bezier(.2,.7,.3,1);will-change:transform;}
-  .mwv-handle img{width:54px;height:54px;pointer-events:none;}
+  .mwv-handle img{width:80px;height:80px;pointer-events:none;}
   .mwv-handle.dragging{transition:none;cursor:grabbing;}
-  .mwv-target{position:absolute;top:50%;width:50px;height:50px;margin-top:-25px;
-    display:flex;align-items:center;justify-content:center;z-index:2;transition:transform .18s cubic-bezier(.2,.8,.3,1);}
-  .mwv-target img{width:50px;height:50px;pointer-events:none;}
-  .mwv-target.l{left:50%;transform:translate(calc(-50% - 76px),-50%);}
-  .mwv-target.r{left:50%;transform:translate(calc(-50% + 76px),-50%);}
-  .mwv-target.hot{transform:translate(-50%,-50%) scale(1.22);}
-  .mwv-target.l.hot{transform:translate(calc(-50% - 76px),-50%) scale(1.22);}
-  .mwv-target.r.hot{transform:translate(calc(-50% + 76px),-50%) scale(1.22);}
+  /* targets: real AOSP ic_lockscreen_camera_normal / unlock_normal 162x162, 135dp offset from center */
+  .mwv-target{position:absolute;top:50%;width:80px;height:80px;margin-top:-40px;
+    display:flex;align-items:center;justify-content:center;z-index:2;transition:transform .18s cubic-bezier(.2,.8,.3,1);
+    opacity:.85;}
+  .mwv-target img{width:80px;height:80px;pointer-events:none;}
+  .mwv-target.l{left:50%;transform:translate(calc(-50% - 135px),-50%);}
+  .mwv-target.r{left:50%;transform:translate(calc(-50% + 135px),-50%);}
+  .mwv-target.hot{transform:translate(-50%,-50%) scale(1.2);opacity:1;}
+  .mwv-target.l.hot{transform:translate(calc(-50% - 135px),-50%) scale(1.2);opacity:1;}
+  .mwv-target.r.hot{transform:translate(calc(-50% + 135px),-50%) scale(1.2);opacity:1;}
   .mwv-chev{position:absolute;right:18px;top:50%;margin-top:-32px;opacity:0;pointer-events:none;
     animation:chevHint 1.6s ease .9s forwards;}
   @keyframes chevHint{0%{opacity:0;transform:translateX(4px)}25%{opacity:.85}70%{opacity:.85}100%{opacity:0;transform:translateX(-4px)}}
@@ -573,12 +579,13 @@
       <div class="lock-space"></div>
       <div class="lock-ringzone">
         <div class="mwv" id="mwv">
-          <div class="mwv-ring" id="mwvRing"></div>
+          <div class="mwv-wave outer"></div>
+          <div class="mwv-wave inner"></div>
+          <div class="mwv-wave inner2"></div>
           <div class="mwv-guide" id="mwvGuide"></div>
-          <div class="mwv-target l" id="mwvCam"><img src="assets/lock_camera_normal.png" alt=""></div>
-          <div class="mwv-target r" id="mwvUnlock"><img src="assets/lock_unlock_normal.png" alt=""></div>
-          <div class="mwv-handle" id="mwvHandle"><img src="assets/lock_handle_normal.png" alt=""></div>
-          <div class="mwv-chev"><img src="assets/ic_lockscreen_chevron_right.png" alt=""></div>
+          <div class="mwv-target l" id="mwvCam"><img src="assets/ic_lockscreen_camera_normal.png" alt=""></div>
+          <div class="mwv-target r" id="mwvUnlock"><img src="assets/ic_lockscreen_unlock_normal.png" alt=""></div>
+          <div class="mwv-handle" id="mwvHandle"><img src="assets/ic_lockscreen_handle_normal.png" alt=""></div>
         </div>
         <div class="lock-carrier">中国移动</div>
       </div>
@@ -1395,14 +1402,14 @@
     const nd=$('#notifDate'); if(nd)nd.textContent=date;}
   tick();setInterval(tick,10000);
 
-  /* ---- lock MultiWaveView drag (ICS: ring stays a CIRCLE, ellipse-guide only appears while dragging, right=unlock, LEFT=camera) ---- */
-  const mwv=$('#mwv'),mHandle=$('#mwvHandle'),mUnlock=$('#mwvUnlock'),mCam=$('#mwvCam'),mRing=$('#mwvRing'),mGuide=$('#mwvGuide');
+  /* ---- lock MultiWaveView drag (ICS 4.0: 270dp outer + 2 inner wave ellipses + handle in center, right=unlock, LEFT=camera) ---- */
+  const mwv=$('#mwv'),mHandle=$('#mwvHandle'),mUnlock=$('#mwvUnlock'),mCam=$('#mwvCam'),mGuide=$('#mwvGuide');
   let drag=false,sx=0,dx=0;const pt=e=>e.touches?e.touches[0]:e;
-  const SNAP=45,MAX=95;
-  function setHandleImg(pressed){mHandle.querySelector('img').src=pressed?'assets/lock_handle_pressed.png':'assets/lock_handle_normal.png';}
+  const SNAP=45,MAX=105;
+  function setHandleImg(pressed){mHandle.querySelector('img').src=pressed?'assets/ic_lockscreen_handle_pressed.png':'assets/ic_lockscreen_handle_normal.png';}
   function setTargetImgs(unlockHot,camHot){
-    mUnlock.querySelector('img').src=unlockHot?'assets/lock_unlock_activated.png':'assets/lock_unlock_normal.png';
-    mCam.querySelector('img').src=camHot?'assets/lock_camera_activated.png':'assets/lock_camera_normal.png';
+    mUnlock.querySelector('img').src=unlockHot?'assets/ic_lockscreen_unlock_activated.png':'assets/ic_lockscreen_unlock_normal.png';
+    mCam.querySelector('img').src=camHot?'assets/ic_lockscreen_camera_activated.png':'assets/ic_lockscreen_camera_normal.png';
     mUnlock.classList.toggle('hot',unlockHot);mCam.classList.toggle('hot',camHot);
   }
   function applyDrag(){
@@ -1422,8 +1429,8 @@
   mHandle.classList.remove('dragging');
   mHandle.style.transition='';mHandle.style.transform='';
   mGuide.style.transition='';mGuide.style.opacity=0;mGuide.style.transform='scaleX(0)';
-  if(d>SNAP)fly(160,()=>show('home'));
-  else if(d<-SNAP)fly(-160,()=>show('camera'));
+  if(d>SNAP)fly(180,()=>show('home'));
+  else if(d<-SNAP)fly(-180,()=>show('camera'));
   else mHandle.style.transform='';
   }
   mHandle.addEventListener('mousedown',startDrag);
