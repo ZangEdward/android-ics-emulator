@@ -69,12 +69,15 @@
   .lock-date{font-size:13px;color:rgba(255,255,255,.88);margin-top:8px;text-align:center;text-shadow:0 1px 4px rgba(0,0,0,.45);}
   .lock-space{flex:1;}
   .lock-ringzone{position:relative;height:240px;flex-shrink:0;margin-bottom:40px;}
-  /* MultiWaveView: 270dp outerring (2dp #1affffff stroke) + handle + left/right targets (135dp radius).
-     chevron hint only fades in briefly on lock-screen enter, then hides (matches AOSP) */
+  /* MultiWaveView: handle (center) + targets (left/right). Wave/ellipse guide only appears while dragging */
   .mwv{position:absolute;left:0;right:0;top:0;bottom:30px;}
   .mwv-ring{position:absolute;left:50%;top:50%;width:150px;height:150px;margin:-75px 0 0 -75px;
-    border-radius:50%;border:2px solid rgba(255,255,255,.10);pointer-events:none;}
-  .mwv-ring.drag{transition:border-color .15s;}
+    border-radius:50%;border:2px solid rgba(255,255,255,.10);pointer-events:none;
+    transform:translate(-50%,-50%);}
+  /* drag-guide ellipse: shown only while handle is being dragged (real AOSP behavior) */
+  .mwv-guide{position:absolute;left:50%;top:50%;width:210px;height:54px;margin:-27px 0 0 -105px;
+    border:2px solid rgba(255,255,255,.22);border-radius:50%;opacity:0;pointer-events:none;
+    transform-origin:50% 50%;transform:scaleX(0);transition:opacity .15s;}
   .mwv-handle{position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px 0 0 -27px;
     display:flex;align-items:center;justify-content:center;cursor:grab;touch-action:none;z-index:3;
     transition:transform .22s cubic-bezier(.2,.7,.3,1);will-change:transform;}
@@ -571,6 +574,7 @@
       <div class="lock-ringzone">
         <div class="mwv" id="mwv">
           <div class="mwv-ring" id="mwvRing"></div>
+          <div class="mwv-guide" id="mwvGuide"></div>
           <div class="mwv-target l" id="mwvCam"><img src="assets/lock_camera_normal.png" alt=""></div>
           <div class="mwv-target r" id="mwvUnlock"><img src="assets/lock_unlock_normal.png" alt=""></div>
           <div class="mwv-handle" id="mwvHandle"><img src="assets/lock_handle_normal.png" alt=""></div>
@@ -1391,10 +1395,10 @@
     const nd=$('#notifDate'); if(nd)nd.textContent=date;}
   tick();setInterval(tick,10000);
 
-  /* ---- lock MultiWaveView drag (ICS: drag RIGHT = unlock, LEFT = camera, snap-back) ---- */
-  const mwv=$('#mwv'),mHandle=$('#mwvHandle'),mUnlock=$('#mwvUnlock'),mCam=$('#mwvCam'),mRing=$('#mwvRing');
+  /* ---- lock MultiWaveView drag (ICS: ring stays a CIRCLE, ellipse-guide only appears while dragging, right=unlock, LEFT=camera) ---- */
+  const mwv=$('#mwv'),mHandle=$('#mwvHandle'),mUnlock=$('#mwvUnlock'),mCam=$('#mwvCam'),mRing=$('#mwvRing'),mGuide=$('#mwvGuide');
   let drag=false,sx=0,dx=0;const pt=e=>e.touches?e.touches[0]:e;
-  const SNAP=45,MAX=95; // px threshold toward target (multiwaveview_snap_margin scaled)
+  const SNAP=45,MAX=95;
   function setHandleImg(pressed){mHandle.querySelector('img').src=pressed?'assets/lock_handle_pressed.png':'assets/lock_handle_normal.png';}
   function setTargetImgs(unlockHot,camHot){
     mUnlock.querySelector('img').src=unlockHot?'assets/lock_unlock_activated.png':'assets/lock_unlock_normal.png';
@@ -1404,20 +1408,23 @@
   function applyDrag(){
     const d=Math.max(-MAX,Math.min(MAX,dx));
     mHandle.style.transform=`translate(${d}px,0)`;
-    // outer ring stretches into an ellipse while dragging (multiwaveview scale x)
-    const k=1+Math.abs(d)/MAX*.45;
-    mRing.style.transform=`translate(-50%,-50%) scale(${k},1)`;
-    setTargetImgs(dx>SNAP/2,dx<-SNAP/2);
+    /* drag guide ellipse: starts at scaleX(0) invisible, stretches as handle moves toward target */
+    const k=Math.abs(d)/MAX; // 0..1
+    mGuide.style.opacity=drag?0.85:0;
+    mGuide.style.transformOrigin=d>=0?'left center':'right center';
+    mGuide.style.transform=`scaleX(${0.25+k*1.1})`;
+    setTargetImgs(d>SNAP/2,dx<-SNAP/2); // sic: dx (intentional)
   }
-  function startDrag(e){drag=true;sx=pt(e).clientX;setHandleImg(true);mHandle.classList.add('dragging');mRing.style.transition='none';mHandle.style.transition='none';}
+  function startDrag(e){drag=true;sx=pt(e).clientX;setHandleImg(true);mHandle.classList.add('dragging');mGuide.style.transition='none';mHandle.style.transition='none';applyDrag();}
   function mv(e){if(!drag)return;dx=pt(e).clientX-sx;applyDrag();if(e.cancelable)e.preventDefault();}
   function endDrag(){if(!drag)return;drag=false;setHandleImg(false);setTargetImgs(false,false);
-    const d=dx;dx=0;
-    mHandle.classList.remove('dragging');
-    mHandle.style.transition='';mRing.style.transition='';mRing.style.transform='';
-    if(d>SNAP)fly(160,()=>show('home'));            // right target = unlock
-    else if(d<-SNAP)fly(-160,()=>show('camera'));   // left target = camera
-    else mHandle.style.transform='';                // snap back
+  const d=dx;dx=0;
+  mHandle.classList.remove('dragging');
+  mHandle.style.transition='';mHandle.style.transform='';
+  mGuide.style.transition='';mGuide.style.opacity=0;mGuide.style.transform='scaleX(0)';
+  if(d>SNAP)fly(160,()=>show('home'));
+  else if(d<-SNAP)fly(-160,()=>show('camera'));
+  else mHandle.style.transform='';
   }
   mHandle.addEventListener('mousedown',startDrag);
   mHandle.addEventListener('touchstart',startDrag,{passive:true});
