@@ -87,9 +87,12 @@
   .mwv-hint span{font-size:15px;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.6);}
   .mwv-hint.show{opacity:1;}
   @keyframes hintPulse{0%,100%{opacity:.55}50%{opacity:1}}
+  /* wave guide ellipse: appears while handle is pressed/dragged (real ICS: wave pops when you touch the handle) */
+  .mwv-wave{position:absolute;left:74%;top:50%;width:300px;height:60px;margin:-30px 0 0 -150px;
+    border:2px solid rgba(255,255,255,.35);border-radius:50%;opacity:0;pointer-events:none;
+    transition:opacity .18s ease, left .05s linear;transform-origin:50% 50%;}
+  .mwv-wave.show{opacity:1;}
   .lock-carrier{position:absolute;left:0;right:0;bottom:20px;text-align:center;font-size:13px;
-    color:rgba(255,255,255,.85);text-shadow:0 1px 4px rgba(0,0,0,.45);}
-  .lock-carrier{position:absolute;left:0;right:0;bottom:8px;text-align:center;font-size:13px;
     color:rgba(255,255,255,.85);text-shadow:0 1px 4px rgba(0,0,0,.45);}
 
   /* ===== home / launcher (ICS Launcher2 DragLayer: qsb top, 5-page workspace, dock divider, hotseat) ===== */
@@ -566,6 +569,7 @@
       <div class="lock-space"></div>
       <div class="lock-ringzone">
         <div class="mwv" id="mwv">
+          <div class="mwv-wave" id="mwvWave"></div>
           <div class="mwv-handle" id="mwvHandle"><img src="assets/ic_lockscreen_handle_normal.png" alt="">
             <div class="mwv-hint" id="mwvHint"><img src="assets/ic_lockscreen_chevron_right.png" alt=""><span>向右滑动解锁</span></div>
           </div>
@@ -1385,21 +1389,23 @@
     const nd=$('#notifDate'); if(nd)nd.textContent=date;}
   tick();setInterval(tick,10000);
 
-  /* ---- lock slide-to-unlock (ICS 4.0 unlock_portrait: handle right-center, drag RIGHT to unlock, guide box pops while pressed) ---- */
-  const mHandle=$('#mwvHandle'),mHint=$('#mwvHint');
+  /* ---- lock slide-to-unlock (ICS 4.0 unlock_portrait: handle right-center, drag RIGHT to unlock, wave+guide pops while pressed) ---- */
+  const mHandle=$('#mwvHandle'),mHint=$('#mwvHint'),mWave=$('#mwvWave');
   let drag=false,sx=0,dx=0;const pt=e=>e.touches?e.touches[0]:e;
   const UNLOCK=70; // px rightward to trigger unlock
   function setHandleImg(pressed){mHandle.querySelector('img').src=pressed?'assets/ic_lockscreen_handle_pressed.png':'assets/ic_lockscreen_handle_normal.png';}
-  function setHint(on){mHint.classList.toggle('show',on);}
+  function setHint(on){mHint.classList.toggle('show',on);mWave.classList.toggle('show',on);}
   function applyDrag(){
     const d=Math.max(0,Math.min(180,dx)); // slide only rightward
     mHandle.style.transform=`translate(${d}px,0)`;
+    mWave.style.left=`calc(74% + ${d}px)`; // wave follows the handle
   }
   function startDrag(e){drag=true;sx=pt(e).clientX;setHandleImg(true);setHint(true);mHandle.classList.add('dragging');mHandle.style.transition='none';applyDrag();}
   function mv(e){if(!drag)return;dx=pt(e).clientX-sx;applyDrag();if(e.cancelable)e.preventDefault();}
   function endDrag(){if(!drag)return;drag=false;setHandleImg(false);setHint(false);
   const d=dx;dx=0;
   mHandle.classList.remove('dragging');mHandle.style.transition='';
+  mWave.style.left='74%';
   if(d>UNLOCK){fly(200,()=>show('home'));}
   else mHandle.style.transform='';
   }
