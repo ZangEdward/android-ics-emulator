@@ -1,0 +1,1811 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Android 4.0 ICS 模拟器 · AOSP</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --blue:#33b5e5; --blue-d:#0099cc;
+    --green:#99cc00; --green-d:#669900;
+    --red:#ff4444; --orange:#ffbb33; --purple:#aa66cc;
+    --bg:#000; --panel:#0e0e0e; --divider:#191919;
+    --txt:#fff; --txt2:#bebebe; --hint:#808080;
+    --hl:rgba(51,181,229,.16);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;
+    -webkit-user-select:none;user-select:none;-webkit-user-drag:none;-webkit-touch-callout:none;touch-action:manipulation;}
+  img,svg{-webkit-user-drag:none;user-select:none;pointer-events:auto;}
+  html,body{height:100%;}
+  body{font-family:'Roboto',sans-serif;background:#000 url(assets/aosp_wallpaper.svg) center/cover no-repeat fixed;
+    color:var(--txt);overflow:hidden;}
+  /* prevent white/black flash on load: screen transparent so body wallpaper shows immediately */
+  .device{width:100vw;height:100vh;background:transparent;position:relative;overflow:hidden;display:flex;flex-direction:column;}
+  .screen{width:100%;height:100%;background:transparent;overflow:hidden;position:relative;display:flex;flex-direction:column;flex:1;min-height:0;}
+  .wallpaper{position:absolute;inset:0;z-index:0;background-size:cover;background-position:center;background-image:url(assets/aosp_wallpaper.svg);}
+
+  /* ===== status bar (ICS status_bar.xml: notif icons left, signal/battery cluster + BLUE clock right) ===== */
+  .statusbar{height:25px;background:linear-gradient(180deg,#262626,#171717);display:flex;align-items:center;
+    padding:0 6px;font-size:12px;font-weight:400;color:#fff;flex-shrink:0;position:relative;z-index:40;
+    box-shadow:inset 0 -1px 0 rgba(0,0,0,.8);}
+  .sb-left{flex:1;display:flex;align-items:center;gap:4px;overflow:hidden;}
+  .sb-left i{width:14px;height:14px;display:inline-flex;}
+  .sb-left svg{width:14px;height:14px;fill:#fff;}
+  .sb-left img{width:14px;height:14px;object-fit:contain;}
+  .sb-cluster{display:flex;align-items:center;gap:3px;padding-left:2px;}
+  /* real AOSP status icons (stat_sys_wifi_signal_4 / stat_sys_signal_4 / stat_sys_battery_100) */
+  .sb-wifi{height:13px;width:auto;}
+  .sb-sig{height:13px;width:auto;}
+  .sb-batt{height:13px;width:auto;}
+  /* TextAppearance.StatusBar.Clock: 16dp, holo_blue_light #33b5e5 */
+  #sbClock{font-weight:400;text-align:left;padding-left:6px;color:#33b5e5;font-size:15px;line-height:1;}
+
+  /* ===== screens ===== */
+  .screen-page{flex:1;overflow-y:auto;position:relative;display:none;z-index:1;background:var(--bg);}
+  .screen-page.on{display:flex;flex-direction:column;animation:scrIn .28s cubic-bezier(.2,.7,.3,1);will-change:transform,opacity;}
+  @keyframes scrIn{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+  /* signature ICS app-open: zoom up from the tapped launcher icon */
+  .screen-page.app-open{animation:appOpen .32s cubic-bezier(.2,.7,.3,1);}
+  @keyframes appOpen{from{transform:translate(var(--ox,0),var(--oy,0)) scale(var(--os,.5));opacity:.35}to{transform:translate(0,0) scale(1);opacity:1}}
+  /* ICS app drawer: slides up from the dock */
+  .screen-page.drawer-open{animation:drUp .28s cubic-bezier(.2,.8,.3,1);}
+  @keyframes drUp{from{transform:scale(.92);opacity:.25}to{transform:scale(1);opacity:1}}
+
+  /* wallpaper-visible screens (lock / home) — keep transparent so wallpaper shows */
+  .wall{background:transparent;}
+
+  /* ===== lock screen (ICS keyguard_screen_tab_unlock.xml + MultiWaveView) ===== */
+  #lock{flex-direction:column;}
+  #lock.on{animation:lockIn .4s cubic-bezier(.2,.7,.3,1);}
+  @keyframes lockIn{from{opacity:0}to{opacity:1}}
+  #lock .lock-clock,#lock .lock-date{animation:lockUp .5s cubic-bezier(.2,.7,.3,1);}
+  @keyframes lockUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+  #lock .mwv,#lock .lock-carrier{animation:lockRing .55s cubic-bezier(.2,.7,.3,1) .08s backwards;}
+  @keyframes lockRing{from{opacity:0;transform:scale(.82)}to{opacity:1;transform:scale(1)}}
+  .lock-top{display:flex;flex-direction:column;align-items:center;padding:15vh 0 0;flex-shrink:0;width:100%;}
+  .lock-clock{font-size:54px;font-weight:200;letter-spacing:1px;line-height:1;color:#fff;text-align:center;text-shadow:0 2px 8px rgba(0,0,0,.45);}
+  .lock-date{font-size:13px;color:rgba(255,255,255,.88);margin-top:8px;text-align:center;text-shadow:0 1px 4px rgba(0,0,0,.45);}
+  .lock-space{flex:1;}
+  .lock-ringzone{position:relative;height:240px;flex-shrink:0;margin-bottom:40px;}
+  /* MultiWaveView: 270dp outerring (2dp #1affffff stroke) + handle + left/right targets (135dp radius).
+     chevron hint only fades in briefly on lock-screen enter, then hides (matches AOSP) */
+  .mwv{position:absolute;left:0;right:0;top:0;bottom:30px;}
+  .mwv-ring{position:absolute;left:50%;top:50%;width:150px;height:150px;margin:-75px 0 0 -75px;
+    border-radius:50%;border:2px solid rgba(255,255,255,.10);pointer-events:none;}
+  .mwv-ring.drag{transition:border-color .15s;}
+  .mwv-handle{position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px 0 0 -27px;
+    display:flex;align-items:center;justify-content:center;cursor:grab;touch-action:none;z-index:3;
+    transition:transform .22s cubic-bezier(.2,.7,.3,1);will-change:transform;}
+  .mwv-handle img{width:54px;height:54px;pointer-events:none;}
+  .mwv-handle.dragging{transition:none;cursor:grabbing;}
+  .mwv-target{position:absolute;top:50%;width:50px;height:50px;margin-top:-25px;
+    display:flex;align-items:center;justify-content:center;z-index:2;transition:transform .18s cubic-bezier(.2,.8,.3,1);}
+  .mwv-target img{width:50px;height:50px;pointer-events:none;}
+  .mwv-target.l{left:50%;transform:translate(calc(-50% - 76px),-50%);}
+  .mwv-target.r{left:50%;transform:translate(calc(-50% + 76px),-50%);}
+  .mwv-target.hot{transform:translate(-50%,-50%) scale(1.22);}
+  .mwv-target.l.hot{transform:translate(calc(-50% - 76px),-50%) scale(1.22);}
+  .mwv-target.r.hot{transform:translate(calc(-50% + 76px),-50%) scale(1.22);}
+  .mwv-chev{position:absolute;right:18px;top:50%;margin-top:-32px;opacity:0;pointer-events:none;
+    animation:chevHint 1.6s ease .9s forwards;}
+  @keyframes chevHint{0%{opacity:0;transform:translateX(4px)}25%{opacity:.85}70%{opacity:.85}100%{opacity:0;transform:translateX(-4px)}}
+  .mwv-chev img{width:14px;height:54px;}
+  .lock-carrier{position:absolute;left:0;right:0;bottom:8px;text-align:center;font-size:13px;
+    color:rgba(255,255,255,.85);text-shadow:0 1px 4px rgba(0,0,0,.45);}
+
+  /* ===== home / launcher (ICS Launcher2 DragLayer: qsb top, 5-page workspace, dock divider, hotseat) ===== */
+  #home{background:transparent;}
+  .gsearch{margin:12px 10px 4px;height:42px;background:rgba(0,0,0,.35);border-radius:4px;display:flex;align-items:center;padding:0 12px;gap:10px;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.14);}
+  .gsearch svg{width:18px;height:18px;fill:#fff;opacity:.9;}
+  .gsearch img{width:18px;height:18px;opacity:.9;}
+  .gsearch .q{flex:1;color:#e8edf3;font-size:14px;letter-spacing:.3px;}
+  .gsearch .mic{width:18px;height:18px;fill:#fff;opacity:.9;}
+  /* ICS Workspace: 5 swipeable pages, 4x4 grid each, page-dots indicator */
+  .workspace{flex:1;display:flex;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+  .workspace::-webkit-scrollbar{display:none;}
+  .ws-page{flex:0 0 100%;scroll-snap-align:start;display:grid;grid-template-columns:repeat(4,1fr);gap:18px 6px;padding:16px 12px;align-content:start;}
+  .page-ind{display:flex;justify-content:center;gap:7px;padding:5px 0 4px;flex-shrink:0;}
+  .page-ind i{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.35);transition:.2s;}
+  .page-ind i.on{background:#fff;}
+  /* workspace_divider: thin line just above the hotseat */
+  .dock-div{height:1px;background:rgba(255,255,255,.10);margin:0 10px;flex-shrink:0;}
+  .app{display:flex;flex-direction:column;align-items:center;gap:7px;cursor:pointer;}
+  .app .tile{width:56px;height:56px;display:flex;align-items:center;justify-content:center;transition:transform .1s;}
+  .app:active .tile{transform:scale(.88);}
+  .app .tile img{width:48px;height:48px;object-fit:contain;}
+  .app .tile img.muted{filter:brightness(0) invert(1);}
+  .app .tile svg{width:34px;height:34px;fill:#fff;}
+  .app .lbl{font-size:11px;color:#e8eef4;text-shadow:0 1px 2px rgba(0,0,0,.6);}
+  /* ICS hotseat: 5 cells, dark panel (hotseat_bg_panel), drawer grid icon centered */
+  .dock{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;background:rgba(0,0,0,.38);border-radius:20px 20px 4px 4px;padding:12px 8px;margin:0 8px 8px;}
+  .dock .app .tile{width:50px;height:50px;border-radius:13px;}
+  .apps-btn{width:50px;height:50px;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;transition:transform .1s;}
+  .apps-btn:active{transform:scale(.88);}
+  .apps-btn svg{width:34px;height:34px;fill:#fff;}
+
+  /* ===== app drawer (ICS AppsCustomizeTabHost: solid black, Apps|Widgets tabs) ===== */
+  #drawer{background:#000;}
+  .drawer-tabs{display:flex;align-items:center;justify-content:center;height:48px;flex-shrink:0;border-bottom:1px solid #111;position:relative;}
+  .drawer-tab{font-size:14px;color:#9a9a9a;padding:0 22px;height:48px;display:flex;align-items:center;position:relative;cursor:pointer;}
+  .drawer-tab.on{color:#fff;}
+  .drawer-tab.on::after{content:"";position:absolute;left:18px;right:18px;bottom:0;height:3px;background:#33b5e5;}
+  .drawer-market{position:absolute;right:14px;top:0;height:48px;display:flex;align-items:center;cursor:pointer;}
+  .drawer-market svg{width:20px;height:20px;fill:#aaa;}
+  .drawer-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px 6px;padding:14px 12px 24px;align-content:start;}
+  .drawer-grid:not(.on){display:none;}
+  .drawer-widgets{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;padding:14px 12px 24px;align-content:start;}
+  .drawer-widgets:not(.on){display:none;}
+  .wcard{background:#161616;border-radius:8px;padding:14px;color:#cfcfcf;font-size:12px;border:1px solid #222;}
+  .wcard .wt{font-size:13px;color:#fff;margin-bottom:6px;font-weight:500;}
+
+  /* ===== action bar (apps) ===== */
+  .actionbar{height:48px;background:linear-gradient(#2c2c2c,#1f1f1f);border-bottom:1px solid #000;
+    display:flex;align-items:center;padding:0 6px 0 4px;gap:6px;flex-shrink:0;box-shadow:0 1px 0 #000;}
+  .ab-icon{width:32px;height:32px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .ab-icon img{width:26px;height:26px;object-fit:contain;filter:brightness(0) invert(1);}
+  .ab-icon svg{width:24px;height:24px;fill:#fff;}
+  .ab-divider{width:1px;height:26px;background:rgba(255,255,255,.15);margin:0 4px;}
+  .ab-up{width:24px;height:24px;position:relative;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+  .ab-up img{width:22px;height:22px;}
+  .ab-up::before,.ab-up::after{display:none;}
+  .ab-title{font-size:18px;font-weight:400;flex:1;letter-spacing:.3px;}
+  .ab-action{width:40px;height:40px;display:flex;align-items:center;justify-content:center;flex-shrink:0;border-radius:2px;}
+  .ab-action:hover{background:rgba(255,255,255,.1);}
+  .ab-action svg{width:22px;height:22px;fill:#fff;}
+  .muted{filter:brightness(0) invert(1);}
+  .gsearch img{width:18px;height:18px;opacity:.85;}
+  .ab-action img{width:22px;height:22px;}
+  .sb-alarm{width:14px;height:14px;}
+  .ab-overflow{width:22px;height:22px;display:flex;flex-direction:column;gap:3px;align-items:center;justify-content:center;}
+  .ab-overflow i{width:4px;height:4px;border-radius:50%;background:#fff;}
+
+  /* ===== holo settings list ===== */
+  .list{background:var(--bg);}
+  .grp-title{font-size:13px;color:var(--blue);padding:16px 16px 6px;font-weight:500;letter-spacing:.5px;}
+  .item{display:flex;align-items:center;height:56px;padding:0 16px;gap:18px;cursor:pointer;background:transparent;border-bottom:1px solid var(--divider);}
+  .item:active{background:#1a1a1a;}
+  .item .ic{width:24px;height:24px;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+  .item .ic img{width:24px;height:24px;object-fit:contain;filter:brightness(0) invert(1);}
+  .item .ic svg{width:22px;height:22px;fill:#fff;}
+  .item .body{flex:1;min-width:0;}
+  .item .t{font-size:16px;color:var(--txt);}
+  .item .s{font-size:14px;color:var(--txt2);margin-top:2px;}
+  .item .val{font-size:13px;color:var(--txt2);}
+  .item .chev{color:#5a5a5a;font-size:18px;}
+  .prog{height:4px;background:#2a2a2a;border-radius:2px;margin:10px 16px 0;overflow:hidden;}
+  .prog i{display:block;height:100%;width:72%;background:var(--blue);}
+  .btns{padding:20px 16px 8px;display:flex;gap:12px;}
+  .hbtn{flex:1;height:42px;border:none;border-radius:2px;font-size:14px;font-weight:500;cursor:pointer;letter-spacing:.4px;
+    background:linear-gradient(#3c3c3c,#2a2a2a);color:#fff;box-shadow:inset 0 0 0 1px #111,0 1px 0 #000;}
+  .hbtn:active{box-shadow:inset 0 0 0 1px #111,inset 0 0 0 999px var(--hl);}
+  .hbtn.primary{background:linear-gradient(#3fc3ef,#1fa9d6);box-shadow:inset 0 0 0 1px #1b93bb;}
+  .hbtn.primary:active{background:linear-gradient(#33b5e5,#159ac6);}
+  /* App Details (settings → appinfo) — modeled on PackageManager's app info */
+  .apphead{display:flex;align-items:center;gap:14px;padding:18px 16px;border-bottom:1px solid var(--divider);}
+  .apphead-icon{width:48px;height:48px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;}
+  .apphead-icon img{width:40px;height:40px;object-fit:contain;}
+  .apphead-text{flex:1;min-width:0;}
+  .apphead-name{font-size:18px;color:#fff;font-weight:500;}
+  .apphead-ver{font-size:12px;color:var(--txt2);margin-top:4px;}
+  .appstorage{padding:14px 16px;}
+  .appstorage-bar{height:6px;background:#2a2a2a;border-radius:3px;overflow:hidden;}
+  .appstorage-fill{height:100%;background:linear-gradient(90deg,#3fc3ef,#1fa9d6);}
+  .appstorage-row{display:flex;justify-content:space-between;margin-top:8px;font-size:13px;color:var(--txt2);}
+  .appstorage-v{color:#fff;}
+  .btnrow{display:flex;gap:12px;padding:8px 16px 16px;}
+  .btnrow .hbtn{flex:1;}
+  .kv-row,.perm-row{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--divider);font-size:15px;}
+  .kv-k,.perm-k{color:var(--txt);}
+  .kv-v,.perm-v{color:var(--txt2);}
+
+  /* native holo switch */
+  .switch{width:52px;height:18px;border-radius:2px;background:#3a3a3a;position:relative;flex-shrink:0;transition:background .18s;box-shadow:inset 0 0 0 1px #000;cursor:pointer;}
+  .switch.on{background:var(--blue);}
+  .switch i{position:absolute;top:1px;left:1px;width:16px;height:16px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.5);transition:left .18s;}
+  .switch.on i{left:35px;}
+  /* checkbox */
+  .chk{width:20px;height:20px;border-radius:2px;background:#3a3a3a;flex-shrink:0;position:relative;box-shadow:inset 0 0 0 1px #000;cursor:pointer;}
+  .chk.on{background:var(--blue);}
+  .chk.on::after{content:"";position:absolute;left:6px;top:2px;width:5px;height:10px;border:solid #fff;border-width:0 2.5px 2.5px 0;transform:rotate(45deg);}
+  .chkimg{width:20px;height:20px;object-fit:contain;}
+  .sld{width:120px;height:18px;display:flex;align-items:center;flex-shrink:0;position:relative;cursor:pointer;touch-action:none;}
+  .sld::before{content:'';position:absolute;left:0;right:0;height:4px;border-radius:2px;background:#2a2a2a;}
+  .sld-f{position:absolute;left:0;height:4px;border-radius:2px;background:var(--blue);}
+  .sld-t{position:absolute;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.5);transform:translateX(-50%);}
+
+  /* ===== ripple ===== */
+  .ripple{position:relative;overflow:hidden;}
+  .ripple-dot{position:absolute;border-radius:50%;background:rgba(51,181,229,.30);transform:scale(0);animation:rip .6s ease-out;pointer-events:none;}
+  @keyframes rip{to{transform:scale(2.4);opacity:0}}
+
+  /* ===== nav bar (ICS NavigationBarView: solid #000, back/home/recent 80dp keys, flex spacers) ===== */
+  .navbar{height:48px;background:#000;display:flex;align-items:stretch;flex-shrink:0;position:relative;z-index:30;}
+  .nav-sp{width:40px;flex-shrink:0;}
+  .nav-sp.flex{width:auto;flex:1;flex-shrink:0;}
+  .nav{width:80px;height:100%;display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative;}
+  .nav img{width:24px;height:24px;object-fit:contain;}
+  .nav:active{background:radial-gradient(circle,rgba(255,255,255,.28) 0%,rgba(255,255,255,0) 62%);}
+
+  /* ===== ICS Easter Egg: PlatLogoActivity ===== */
+  #platlogo{background:#1a1a1a;align-items:center;justify-content:center;overflow:hidden;position:relative;}
+  .platlogo-stage{flex:1;display:flex;align-items:center;justify-content:center;width:100%;height:100%;}
+  .platlogo-content{display:flex;flex-direction:column;align-items:center;gap:18px;transform-origin:center center;transition:transform .18s cubic-bezier(.2,.7,.3,1);user-select:none;cursor:pointer;}
+  .platlogo-bugdroid{width:84px;height:104px;filter:drop-shadow(0 2px 6px rgba(0,0,0,.4));}
+  .platlogo-text{text-align:center;color:#9bd441;}
+  .platlogo-version{font-size:36px;font-weight:300;letter-spacing:2px;line-height:1;}
+  .platlogo-version-sub{font-size:64px;font-weight:200;letter-spacing:3px;line-height:1;margin-top:2px;}
+  .platlogo-name{font-size:18px;font-weight:400;letter-spacing:6px;margin-top:14px;color:#fff;text-transform:uppercase;}
+
+  /* ===== ICS Easter Egg: Nyandroid (Nyan Cat screensaver) ===== */
+  #nyandroid{background:#003366;overflow:hidden;padding:0;}
+  .nyandroid-board{position:absolute;inset:0;z-index:0;overflow:hidden;}
+  .ncat,.nstar{position:absolute;pointer-events:none;will-change:transform,left;image-rendering:pixelated;}
+  .ncat{width:48px;height:48px;}
+  .nstar{width:14px;height:14px;}
+
+  .toast{position:absolute;bottom:64px;left:50%;transform:translateX(-50%);background:rgba(30,30,30,.96);
+    color:#fff;font-size:13px;padding:10px 18px;border-radius:4px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:80;box-shadow:0 2px 10px rgba(0,0,0,.6);white-space:nowrap;}
+  .toast.show{opacity:1;}
+
+  /* ===== status-bar notification icons (dynamic) ===== */
+  .sbni{width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;}
+  .sbni svg{width:14px;height:14px;fill:#fff;}
+  .sbni img{width:14px;height:14px;object-fit:contain;filter:brightness(0) invert(1);}
+
+  /* ===== notification drawer (status-bar pull-down) ===== */
+  #notif{position:absolute;left:0;right:0;top:25px;bottom:46px;background:#1a1a1a;z-index:50;
+    transform:translateY(calc(-100% - 25px));transition:transform .28s cubic-bezier(.2,.8,.2,1);display:flex;flex-direction:column;box-shadow:0 8px 24px rgba(0,0,0,.6);}
+  /* status_bar_expanded header: 52dp, Date left (16sp holo_blue), settings + clear icons right */
+  .notif-bar{height:52px;background:linear-gradient(#232323,#161616);display:flex;align-items:center;padding:0 4px 0 16px;gap:0;flex-shrink:0;}
+  .notif-date{font-size:16px;color:#33b5e5;flex:1;text-align:left;white-space:nowrap;}
+  .notif-icon-btn{width:40px;height:100%;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0 8px;flex-shrink:0;}
+  .notif-icon-btn:active{background:rgba(255,255,255,.1);}
+  .notif-icon-btn img{width:24px;height:24px;object-fit:contain;}
+  /* 2dp status_bar_hr divider */
+  .notif-hr{height:2px;background:rgba(255,255,255,.08);flex-shrink:0;}
+  /* Quick Settings grid (Android 4.2 QuickSettingsTileView: 4-col grid, icon + label) */
+  .qs-panel{display:none;flex-shrink:0;background:#141414;padding:10px 8px 4px;}
+  .qs-panel.show{display:block;animation:qsIn .22s ease;}
+  @keyframes qsIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+  .qs-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;}
+  .qs-tile{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+    height:86px;border-radius:4px;background:#1f1f1f;cursor:pointer;user-select:none;}
+  .qs-tile:active{background:#2a2a2a;}
+  .qs-tile img{width:40px;height:40px;object-fit:contain;}
+  .qs-tile span{font-size:11px;color:#ddd;}
+  .qs-tile.off img{opacity:.35;filter:grayscale(1);}
+  .qs-tile.off span{color:#888;}
+  .qs-tile[data-go="1"] img{filter:grayscale(0);}
+  .qs-brightness{display:flex;align-items:center;gap:12px;padding:12px 8px 6px;}
+  .qs-bric{width:26px;height:26px;object-fit:contain;flex-shrink:0;}
+  .qs-sld{flex:1;height:4px;background:#333;border-radius:2px;position:relative;touch-action:none;}
+  .qs-sld-f{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#3fc3ef,#1fa9d6);border-radius:2px;}
+  .qs-sld-t{position:absolute;top:50%;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.5);}
+  .notif-list{flex:1;overflow-y:auto;}
+  /* notification rows: 65dp each, 48dp large icon left, text content right */
+  .notif-item{display:flex;align-items:center;gap:12px;min-height:65px;padding:8px 14px;border-bottom:1px solid #2a2a2a;cursor:pointer;}
+  .notif-item:active{background:#222;}
+  .notif-ic{width:40px;height:40px;flex-shrink:0;display:flex;align-items:center;justify-content:center;border-radius:4px;background:rgba(255,255,255,.06);overflow:hidden;}
+  .notif-ic img{width:32px;height:32px;object-fit:contain;}
+  .notif-ic svg{width:28px;height:28px;fill:#e0e0e0;}
+  .notif-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}
+  .notif-title{font-size:14px;color:#fff;font-weight:500;}
+  .notif-text{font-size:13px;color:#bbb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .notif-time{font-size:11px;color:#888;}
+  .notif-empty{padding:20px;text-align:center;color:#888;font-size:14px;}
+  .notif-item:active{background:#161616;}
+
+  /* ===== dialer ===== */
+  .dial-display{height:66px;display:flex;align-items:center;padding:0 18px;gap:10px;margin-top:6px;}
+  .dial-num{flex:1;font-size:30px;font-weight:300;color:#fff;text-align:right;letter-spacing:1px;overflow:hidden;white-space:nowrap;}
+  .dial-del{width:34px;height:34px;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:.85;flex-shrink:0;}
+  .dial-del svg{width:26px;height:26px;fill:#fff;}
+  .dial-del img{width:26px;height:26px;}
+  .dial-del:active{opacity:.4;}
+  .keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:14px 12px;padding:6px 26px 0;}
+  .key{height:62px;border:none;background:transparent;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;color:#fff;transition:background .12s;font-family:inherit;}
+  .key .n{font-size:30px;font-weight:300;line-height:1;}
+  .key .l{font-size:10px;color:#8c959d;margin-top:3px;letter-spacing:1px;}
+  .key:active{background:rgba(51,181,229,.20);}
+  .dial-call{width:62px;height:62px;border-radius:50%;background:var(--green);margin:18px auto 0;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.5);}
+  .dial-call svg{width:30px;height:30px;fill:#fff;}
+  .dial-call img{width:30px;height:30px;}
+  .dial-call:active{background:var(--green-d);}
+
+  /* ===== messaging (conversation list) ===== */
+  .msg-list{background:var(--bg);}
+  .msg-item{display:flex;align-items:center;height:72px;padding:0 16px;gap:14px;cursor:pointer;border-bottom:1px solid var(--divider);}
+  .msg-item:active{background:#1a1a1a;}
+  .msg-av{width:44px;height:44px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:500;color:#fff;}
+  .msg-body{flex:1;min-width:0;}
+  .msg-top{display:flex;justify-content:space-between;gap:8px;align-items:baseline;}
+  .msg-name{font-size:16px;color:#fff;font-weight:400;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .msg-time{font-size:12px;color:var(--hint);flex-shrink:0;}
+  .msg-snip{font-size:14px;color:var(--txt2);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+  /* ===== camera ===== */
+  #camera{background:#000;}
+  .cam-view{flex:1;position:relative;overflow:hidden;background:#000;}
+  #camVideo{width:100%;height:100%;object-fit:cover;display:block;}
+  .cam-grid{position:absolute;inset:0;pointer-events:none;opacity:.45;
+    background:
+      linear-gradient(rgba(255,255,255,.15) 1px,transparent 1px) 0 0/100% 33.34%,
+      linear-gradient(90deg,rgba(255,255,255,.15) 1px,transparent 1px) 0 0/33.34% 100%;}
+  .cam-bar{height:96px;background:#000;display:flex;align-items:center;justify-content:space-around;flex-shrink:0;}
+  .cam-thumb{width:48px;height:48px;border-radius:4px;background-size:cover;background-position:center;background-color:#222;cursor:pointer;}
+  .cam-shutter{width:64px;height:64px;border-radius:50%;background:#fff;border:4px solid #cfcfcf;cursor:pointer;transition:transform .1s;}
+  .cam-shutter:active{transform:scale(.9);}
+  .cam-placeholder{width:48px;height:48px;}
+
+  /* ===== gallery ===== */
+  #gallery{background:var(--bg);}
+  .gal-grid{flex:1;display:grid;grid-template-columns:repeat(3,1fr);gap:3px;padding:3px;align-content:start;overflow-y:auto;}
+  .gal-cell{aspect-ratio:1;overflow:hidden;cursor:pointer;background:#111;}
+  .gal-cell img{width:100%;height:100%;object-fit:cover;}
+  .gal-empty{padding:48px 16px;text-align:center;color:var(--hint);font-size:14px;grid-column:1/-1;}
+  #galView{position:absolute;inset:0;background:#000;z-index:90;display:none;align-items:center;justify-content:center;}
+  #galView img{max-width:100%;max-height:100%;object-fit:contain;}
+  .gal-close{position:absolute;top:8px;right:16px;color:#fff;font-size:28px;line-height:1;cursor:pointer;z-index:91;}
+
+  /* ===== Recents / multitasking (ICS 4.0.4 status_bar_recent_panel.xml / recent_item.xml) ===== */
+  #recents{background:rgba(0,0,0,.70);} /* status_bar_recents_background_solid #b3000000 */
+  .rec-head{font-size:14px;color:#fff;padding:16px 0 8px;text-align:center;flex-shrink:0;letter-spacing:.5px;}
+  .rec-list{flex:1;overflow-y:auto;padding:8px 0 20px;display:flex;flex-direction:column;align-items:center;gap:16px;}
+  .rec-item{position:relative;width:300px;max-width:90%;height:150px;border-radius:3px;overflow:hidden;
+    background:#1c1c1c;box-shadow:0 1px 8px rgba(0,0,0,.55);cursor:pointer;touch-action:pan-y;
+    border:1px solid rgba(255,255,255,.08);}
+  .rec-item .ri-thumb{position:absolute;top:0;right:0;width:184px;height:150px;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+  .rec-item .ri-thumb .ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.9);}
+  .rec-item .ri-thumb .ph img{width:100%;height:100%;object-fit:cover;display:block;}
+  .rec-item .ri-thumb .ph svg{width:50px;height:50px;fill:rgba(255,255,255,.9);}
+  .rec-item .ri-callout{position:absolute;left:0;top:28px;width:104px;height:1px;background:rgba(255,255,255,.22);}
+  .rec-item .ri-label{position:absolute;left:8px;top:6px;width:96px;font-size:14px;color:#fff;line-height:1.25;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 2px rgba(0,0,0,.6);}
+  .rec-item .ri-icon{position:absolute;left:8px;top:32px;width:36px;height:36px;border-radius:5px;
+    display:flex;align-items:center;justify-content:center;overflow:hidden;background:rgba(255,255,255,.06);}
+  .rec-item .ri-icon img{width:100%;height:100%;object-fit:contain;}
+  .rec-item .ri-icon svg{width:24px;height:24px;fill:#fff;}
+  .rec-item .ri-desc{position:absolute;left:8px;top:78px;width:96px;font-size:12px;color:rgba(255,255,255,.65);line-height:1.2;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 2px rgba(0,0,0,.6);}
+  .rec-empty{padding:90px 16px;text-align:center;color:#33b5e5;font-size:20px;} /* holo_blue_light, 20dp */
+  .rec-menu{position:fixed;z-index:60;background:#2b2b2b;border:1px solid #4a4a4a;border-radius:4px;
+    box-shadow:0 6px 20px rgba(0,0,0,.6);overflow:hidden;min-width:168px;}
+  .rec-menu div{padding:13px 20px;font-size:14px;color:#fff;cursor:pointer;}
+  .rec-menu div:active{background:#33b5e5;color:#000;}
+
+  /* ===== shared action-bar title/url tweaks ===== */
+  .br-url{flex:1;height:32px;background:rgba(255,255,255,.12);border-radius:4px;display:flex;align-items:center;padding:0 10px;font-size:13px;color:#dfe6ec;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+
+  /* ===== Browser ===== */
+  #browser{background:#fff;color:#222;}
+  .br-body{flex:1;overflow-y:auto;background:#fff;}
+  .br-start{padding:24px 16px;}
+  .br-start h3{font-size:15px;color:#666;font-weight:500;margin-bottom:14px;}
+  .br-bm{display:grid;grid-template-columns:repeat(3,1fr);gap:22px 6px;}
+  .br-bm a{display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer;color:#333;text-decoration:none;font-size:12px;}
+  .br-bm .bm-ic{width:46px;height:46px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:600;font-size:18px;}
+  .br-page{padding:22px 18px;line-height:1.7;font-size:14px;color:#333;}
+  .br-page h1{font-size:22px;color:#33b5e5;margin-bottom:10px;}
+  .br-page p{margin-bottom:12px;}
+  .br-page .tag{display:inline-block;background:#e6f6fb;color:#1a8bb0;padding:2px 8px;border-radius:3px;font-size:12px;margin-right:6px;}
+
+  /* ===== Calendar ===== */
+  #calendar{background:#0e0e0e;}
+  .cal-week{display:grid;grid-template-columns:repeat(7,1fr);background:#111;border-bottom:1px solid #222;}
+  .cal-week span{text-align:center;font-size:11px;color:#888;padding:8px 0;}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);flex:1;}
+  .cal-cell{aspect-ratio:1/1;display:flex;align-items:flex-start;justify-content:center;padding-top:8px;font-size:14px;color:#ddd;border-right:1px solid #1a1a1a;border-bottom:1px solid #1a1a1a;position:relative;cursor:pointer;}
+  .cal-cell.dim{color:#555;}
+  .cal-cell.today{color:#fff;font-weight:700;}
+  .cal-cell.today::after{content:"";position:absolute;bottom:8px;width:5px;height:5px;border-radius:50%;background:#33b5e5;}
+  .cal-cell .dot{position:absolute;top:6px;right:6px;width:5px;height:5px;border-radius:50%;background:#99cc00;}
+
+  /* ===== Clock ===== */
+  #clock{background:#0e0e0e;}
+  .clk-tabs{display:flex;background:#111;border-bottom:1px solid #222;}
+  .clk-tab{flex:1;text-align:center;padding:12px 0;font-size:13px;color:#999;cursor:pointer;border-bottom:2px solid transparent;}
+  .clk-tab.on{color:#fff;border-bottom-color:#33b5e5;}
+  .clk-body{flex:1;overflow-y:auto;}
+  .clk-row{display:flex;align-items:center;padding:14px 16px;border-bottom:1px solid #1c1c1c;}
+  .clk-row .nm{flex:1;font-size:15px;color:#eee;}
+  .clk-row .tm{font-size:15px;color:#bbb;}
+  .clk-empty{padding:50px 16px;text-align:center;color:#666;font-size:14px;}
+  .clk-center{padding:34px 16px;text-align:center;}
+  .big-time{font-size:54px;font-weight:300;color:#fff;font-variant-numeric:tabular-nums;}
+  .clk-sub{font-size:13px;color:#888;margin-top:6px;}
+  .timer-set{display:flex;align-items:center;justify-content:center;gap:8px;margin:20px 0;}
+  .timer-set input{width:64px;background:#1a1a1a;border:1px solid #333;color:#fff;font-size:30px;text-align:center;border-radius:6px;padding:6px;font-variant-numeric:tabular-nums;}
+  .clk-btn{margin:14px auto;display:block;background:#33b5e5;color:#fff;border:none;padding:12px 30px;border-radius:4px;font-size:15px;cursor:pointer;}
+  .clk-btn.sec{background:#2a2a2a;}
+  .lap{font-size:13px;color:#bbb;padding:6px 16px;border-bottom:1px solid #1c1c1c;display:flex;justify-content:space-between;}
+
+  /* ===== Calculator ===== */
+  #calculator{background:#1a1a1a;}
+  .calc-disp{background:#1a1a1a;color:#fff;font-size:46px;font-weight:300;text-align:right;padding:26px 18px 14px;min-height:92px;line-height:1.1;overflow:hidden;font-variant-numeric:tabular-nums;}
+  .calc-keys{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#2a2a2a;flex:1;}
+  .calc-keys button{border:none;font-size:22px;color:#fff;background:#2b2b2b;cursor:pointer;padding:0;transition:background .1s;font-family:'Roboto',sans-serif;}
+  .calc-keys button:active{background:#3d3d3d;}
+  .calc-keys .ck.fun{background:#1f1f1f;color:#cfcfcf;}
+  .calc-keys .ck.op{background:#33b5e5;color:#fff;font-size:26px;}
+  .calc-keys .ck.op:active{background:#2aa3cf;}
+  .calc-keys .ck.zero{grid-column:span 2;}
+  .calc-keys .ck.eq{background:#33b5e5;}
+
+  /* ===== Email ===== */
+  #email{background:#0e0e0e;}
+  .email-list{flex:1;overflow-y:auto;}
+  .email-item{padding:13px 16px;border-bottom:1px solid #1c1c1c;cursor:pointer;}
+  .email-item .e-from{font-size:15px;color:#fff;font-weight:500;}
+  .email-item .e-sub{font-size:13px;color:#ccc;margin-top:2px;}
+  .email-item .e-prev{font-size:12px;color:#888;margin-top:3px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+  .email-item .e-time{float:right;font-size:11px;color:#777;}
+  .email-detail{padding:18px 16px;color:#eee;line-height:1.7;font-size:14px;}
+  .email-detail .ed-from{font-size:16px;font-weight:600;}
+  .email-detail .ed-sub{font-size:14px;color:#aaa;margin:2px 0 12px;}
+  .email-detail .ed-body{color:#ddd;}
+
+  /* ===== Music ===== */
+  #music{background:#0e0e0e;}
+  .music-list{flex:1;overflow-y:auto;}
+  .music-item{display:flex;align-items:center;padding:10px 14px;border-bottom:1px solid #1c1c1c;cursor:pointer;gap:12px;}
+  .music-item .m-art{width:42px;height:42px;border-radius:5px;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px;}
+  .music-item .m-info{flex:1;min-width:0;}
+  .music-item .m-title{font-size:14px;color:#fff;}
+  .music-item .m-artist{font-size:12px;color:#999;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+  .music-item.playing .m-title{color:#33b5e5;}
+  .nowplaying{background:#161616;border-top:1px solid #222;padding:10px 14px 14px;}
+  .np-art{width:46px;height:46px;border-radius:6px;float:left;margin-right:12px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px;}
+  .np-info{overflow:hidden;}
+  .np-title{font-size:14px;color:#fff;}
+  .np-artist{font-size:12px;color:#999;}
+  .np-prog{height:3px;background:#333;border-radius:2px;margin:10px 0 8px;clear:both;}
+  .np-prog-f{height:100%;width:0;background:#33b5e5;border-radius:2px;}
+  .np-ctrl{display:flex;justify-content:center;gap:34px;align-items:center;}
+  .np-b{width:40px;height:40px;display:flex;align-items:center;justify-content:center;cursor:pointer;}
+  .np-b svg{width:28px;height:28px;fill:#fff;}
+  #npPlay svg{width:34px;height:34px;fill:#33b5e5;}
+
+  /* ===== Contacts ===== */
+  #contacts{background:#0e0e0e;}
+  .contacts-list{flex:1;overflow-y:auto;}
+  .contact-item{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid #1c1c1c;cursor:pointer;}
+  .contact-item .c-av{width:44px;height:44px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;font-weight:600;}
+  .contact-item .c-name{font-size:15px;color:#fff;}
+  .contact-detail{position:absolute;inset:0;background:#0e0e0e;display:none;flex-direction:column;padding-top:0;z-index:80;}
+  .contact-detail.on{display:flex;}
+  .cd-head{padding:26px 16px;text-align:center;border-bottom:1px solid #222;}
+  .cd-av{width:84px;height:84px;border-radius:50%;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:34px;font-weight:600;}
+  .cd-name{font-size:22px;color:#fff;}
+  .cd-row{padding:16px;border-bottom:1px solid #1c1c1c;color:#eee;font-size:14px;}
+  .cd-row .cd-l{font-size:12px;color:#888;margin-bottom:2px;}
+
+  /* ===== Downloads ===== */
+  #downloads{background:#0e0e0e;}
+  .dl-list{flex:1;overflow-y:auto;}
+  .dl-item{display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid #1c1c1c;}
+  .dl-item .dl-ic{width:40px;height:40px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:600;}
+  .dl-item .dl-info{flex:1;min-width:0;}
+  .dl-item .dl-name{font-size:14px;color:#fff;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+  .dl-item .dl-meta{font-size:12px;color:#999;margin-top:2px;}
+
+  /* ===== Sound Recorder ===== */
+  #recorder{background:#0e0e0e;}
+  .rec-main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;}
+  .rec-time{font-size:46px;font-weight:300;color:#fff;font-variant-numeric:tabular-nums;}
+  .rec-btn{width:92px;height:92px;border-radius:50%;background:#ff4444;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 18px rgba(255,68,68,.4);transition:transform .1s;}
+  .rec-btn:active{transform:scale(.92);}
+  .rec-btn svg{width:42px;height:42px;fill:#fff;}
+  .rec-btn.recording{background:#cc3333;animation:recpulse 1.2s infinite;}
+  @keyframes recpulse{0%,100%{box-shadow:0 4px 18px rgba(255,68,68,.4);}50%{box-shadow:0 4px 26px rgba(255,68,68,.8);}}
+  .rec-hint{font-size:13px;color:#999;}
+  .rec-list{flex:1;overflow-y:auto;border-top:1px solid #222;width:100%;}
+  .rec-clip{display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid #1c1c1c;}
+  .rec-clip .rc-ic{width:38px;height:38px;border-radius:7px;background:#33b5e5;display:flex;align-items:center;justify-content:center;color:#fff;}
+  .rec-clip .rc-info{flex:1;}
+  .rec-clip .rc-name{font-size:14px;color:#fff;}
+  .rec-clip .rc-meta{font-size:12px;color:#999;}
+</style>
+</head>
+<body>
+<!-- ===== icon sprite (non-official glyphs; official app icons are PNGs in /assets) ===== -->
+<svg style="position:absolute;width:0;height:0" aria-hidden="true">
+  <symbol id="i-msg" viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></symbol>
+  <symbol id="i-browser" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></symbol>
+  <symbol id="i-calc" viewBox="0 0 24 24"><path d="M7 2h10c1.1 0 2 .9 2 2v16c0 1.1-.9 2-2 2H7c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2zm0 4v3h2V6H7zm0 5v3h2v-3H7zm0 5v3h2v-3H7zm5-10v3h2V6h-2zm0 5v3h2v-3h-2zm0 5v3h2v-3h-2zm5-10v3h2V6h-2zm0 5v3h2v-3h-2zm0 5v3h2v-3h-2z"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></symbol>
+  <symbol id="i-apps" viewBox="0 0 24 24"><rect x="2" y="2" width="9" height="9" rx="2"/><rect x="13" y="2" width="9" height="9" rx="2"/><rect x="2" y="13" width="9" height="9" rx="2"/><rect x="13" y="13" width="9" height="9" rx="2"/></symbol>
+  <symbol id="i-music" viewBox="0 0 24 24"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></symbol>
+  <symbol id="i-bluetooth" viewBox="0 0 24 24"><path d="M17 7l-5-5-1 1 4 4-3 3 3 3-4 4 1 1 5-5V7zm-2 1.5L12.5 11 15 13.5V8.5zM12.5 13L15 15.5V12.5L12.5 13z" fill="#fff"/></symbol>
+  <symbol id="i-speaker" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/></symbol>
+  <symbol id="i-display" viewBox="0 0 24 24"><path d="M4 4h16v11H4zM2 19h20v1H2z" fill="#fff" opacity=".85"/></symbol>
+  <symbol id="i-battery-set" viewBox="0 0 24 24"><path d="M4 9h14v6H4zM18 11h2v2h-2z" fill="#fff" opacity=".85"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><path d="M12 1a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2h-1V6a5 5 0 0 0-5-5zm3 8H9V6a3 3 0 0 1 6 0v3z"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 5L20.49 19l-5-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></symbol>
+  <symbol id="i-apps" viewBox="0 0 24 24"><path d="M4 4h7v7H4zm9 0h7v7h-7zM4 13h7v7H4zm9 0h7v7h-7z"/></symbol>
+  <symbol id="i-alarm" viewBox="0 0 24 24"><path d="M12 2a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm0 16a7 7 0 1 1 0-14 7 7 0 0 1 0 14zm1-11h-2v6l4 2.4 1-1.7-3-1.8z"/></symbol>
+  <symbol id="i-data" viewBox="0 0 24 24"><path d="M3 3h2v18H3zM9 9h2v12H9zM15 5h2v16h-2zM21 12h2v9h-2z"/></symbol>
+  <symbol id="i-call" viewBox="0 0 24 24"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1C10.4 21 3 13.6 3 4c0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></symbol>
+  <symbol id="i-del" viewBox="0 0 24 24"><path d="M22 3H7c-.69 0-1.23.35-1.59.88L0 12l5.41 8.12C5.77 20.65 6.31 21 7 21h15c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-3 12.59L17.59 17 14 13.41 10.41 17 9 15.59 12.59 12 9 8.41 10.41 7 14 10.59 17.59 7 19 8.41 15.41 12 19 15.59z"/></symbol>
+  <symbol id="i-contacts" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></symbol>
+  <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M12 18.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM4 11l2.5 2.5a9.5 9.5 0 0 1 13 0L22 11a13 13 0 0 0-18 0zm5 5l2.5 2.5a3.5 3.5 0 0 1 5 0L19 16a7.5 7.5 0 0 0-10 0z"/></symbol>
+  <symbol id="i-maps" viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5z"/></symbol>
+  <symbol id="i-about" viewBox="0 0 24 24"><path d="M11 7h2v2h-2zm0 4h2v6h-2zm1-9a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16z"/></symbol>
+  <!-- colored launcher icons (replicas of AOSP stock) -->
+  <symbol id="i-le" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="4.5" fill="#39b5e0"/><rect x="6" y="8" width="12" height="9" rx="1" fill="#fff"/><path d="M6 9 L12 13 L18 9" fill="none" stroke="#39b5e0" stroke-width="1.3" stroke-linejoin="round"/></symbol>
+  <symbol id="i-lc" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#2c2c2c"/><circle cx="12" cy="12" r="10" fill="none" stroke="#ffb74d" stroke-width="1.3"/><line x1="12" y1="12" x2="12" y2="6.5" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/><line x1="12" y1="12" x2="16" y2="12.5" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-ld" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="4.5" fill="#4fc3f7"/><path d="M12 6 v8 M8 11 l4 4 4-4" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><rect x="7" y="16.5" width="10" height="2.4" rx="1.2" fill="#fff"/></symbol>
+  <symbol id="i-compose" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></symbol>
+  <symbol id="i-prev" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></symbol>
+  <symbol id="i-next" viewBox="0 0 24 24"><path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z"/></symbol>
+  <symbol id="i-fwd" viewBox="0 0 24 24"><path d="M8.59 7.41 10 6l6 6-6 6-1.41-1.41L13.17 12z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></symbol>
+</svg>
+
+<div class="device" id="device">
+  <div class="screen">
+    <div class="wallpaper"></div>
+    <!-- status bar -->
+    <div class="statusbar" id="statusbar">
+      <div class="sb-left" id="sbLeft"></div>
+      <div class="sb-cluster">
+        <img class="sb-wifi" src="assets/stat_sys_wifi_signal_4.png" alt="">
+        <img class="sb-sig" src="assets/stat_sys_signal_4.png" alt="">
+        <img class="sb-batt" src="assets/stat_sys_battery_100.png" alt="">
+      </div>
+      <span id="sbClock">18:50</span>
+    </div>
+
+    <!-- LOCK -->
+    <div class="screen-page wall on" id="lock">
+      <!-- keyguard_screen_tab_unlock: clock/date top-right, Space, MultiWaveView, carrier -->
+      <div class="lock-top">
+        <div class="lock-clock" id="lockTime">22:28</div>
+        <div class="lock-date" id="lockDate">星期日 8月9日</div>
+      </div>
+      <div class="lock-space"></div>
+      <div class="lock-ringzone">
+        <div class="mwv" id="mwv">
+          <div class="mwv-ring" id="mwvRing"></div>
+          <div class="mwv-target l" id="mwvCam"><img src="assets/lock_camera_normal.png" alt=""></div>
+          <div class="mwv-target r" id="mwvUnlock"><img src="assets/lock_unlock_normal.png" alt=""></div>
+          <div class="mwv-handle" id="mwvHandle"><img src="assets/lock_handle_normal.png" alt=""></div>
+          <div class="mwv-chev"><img src="assets/ic_lockscreen_chevron_right.png" alt=""></div>
+        </div>
+        <div class="lock-carrier">中国移动</div>
+      </div>
+    </div>
+
+    <!-- HOME -->
+    <div class="screen-page wall" id="home">
+      <div class="gsearch ripple">
+        <img class="muted" src="assets/ic_search.png" alt="">
+        <span class="q">Google</span>
+        <svg class="mic" viewBox="0 0 24 24"><use href="#i-mic"/></svg>
+      </div>
+      <div class="workspace" id="workspace"></div>
+      <div class="page-ind" id="pageInd"></div>
+      <div class="dock-div"></div>
+      <div class="dock" id="dock"></div>
+    </div>
+
+    <!-- APP DRAWER -->
+    <div class="screen-page wall" id="drawer">
+      <div class="drawer-tabs">
+        <div class="drawer-tab on" id="tabApps">应用</div>
+        <div class="drawer-tab" id="tabWidgets">小组件</div>
+        <div class="drawer-market" id="drawerMarket" title="应用商店"><svg viewBox="0 0 24 24"><use href="#i-play"/></svg></div>
+      </div>
+      <div class="drawer-grid on" id="drawerGrid"></div>
+      <div class="drawer-widgets" id="drawerWidgets"></div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div class="screen-page" id="settings">
+      <div class="actionbar">
+        <div class="ab-up" id="setBack"><img src="assets/aosp_ab_back.png" alt=""></div>
+        <div class="ab-icon"><img src="assets/ic_settings.png" alt=""></div>
+        <div class="ab-divider"></div>
+        <div class="ab-title" id="setTitle">设置</div>
+        <div class="ab-action"><img class="muted" src="assets/ic_search.png" alt=""></div>
+        <div class="ab-action"><div class="ab-overflow"><i></i><i></i><i></i></div></div>
+      </div>
+      <div class="list" id="settingsList"></div>
+    </div>
+
+    <!-- DIALER -->
+    <div class="screen-page" id="dialer">
+      <div class="actionbar">
+        <div class="ab-up" id="dialBack"><img src="assets/aosp_ab_back.png" alt=""></div>
+        <div class="ab-title">拨号</div>
+        <div class="ab-action"><svg viewBox="0 0 24 24"><use href="#i-contacts"/></svg></div>
+        <div class="ab-overflow"><i></i><i></i><i></i></div>
+      </div>
+      <div class="dial-display">
+        <div class="dial-num" id="dialNum"></div>
+        <div class="dial-del" id="dialDel"><img class="muted" src="assets/aosp_input_delete.png" alt=""></div>
+      </div>
+      <div class="keypad" id="keypad">
+        <button class="key" data-d="1"><span class="n">1</span></button>
+        <button class="key" data-d="2"><span class="n">2</span><span class="l">ABC</span></button>
+        <button class="key" data-d="3"><span class="n">3</span><span class="l">DEF</span></button>
+        <button class="key" data-d="4"><span class="n">4</span><span class="l">GHI</span></button>
+        <button class="key" data-d="5"><span class="n">5</span><span class="l">JKL</span></button>
+        <button class="key" data-d="6"><span class="n">6</span><span class="l">MNO</span></button>
+        <button class="key" data-d="7"><span class="n">7</span><span class="l">PQRS</span></button>
+        <button class="key" data-d="8"><span class="n">8</span><span class="l">TUV</span></button>
+        <button class="key" data-d="9"><span class="n">9</span><span class="l">WXYZ</span></button>
+        <button class="key" data-d="*"><span class="n">*</span></button>
+        <button class="key" data-d="0"><span class="n">0</span><span class="l">+</span></button>
+        <button class="key" data-d="#"><span class="n">#</span></button>
+      </div>
+      <div class="dial-call" id="dialCall"><img class="muted" src="assets/ic_menu_call.png" alt=""></div>
+    </div>
+
+    <!-- MESSAGING -->
+    <div class="screen-page" id="messaging">
+      <div class="actionbar">
+        <div class="ab-up" id="msgBack"><img src="assets/aosp_ab_back.png" alt=""></div>
+        <div class="ab-title">信息</div>
+        <div class="ab-action"><img src="assets/ic_compose.png" alt=""></div>
+        <div class="ab-overflow"><i></i><i></i><i></i></div>
+      </div>
+      <div class="msg-list" id="msgList"></div>
+    </div>
+
+    <!-- CAMERA -->
+    <div class="screen-page" id="camera">
+      <div class="actionbar">
+        <div class="ab-up" id="camBack"><img src="assets/aosp_ab_back.png" alt=""></div>
+        <div class="ab-title">相机</div>
+        <div class="ab-action" id="camGallery"><img class="muted" src="assets/ic_gallery.png" alt=""></div>
+      </div>
+      <div class="cam-view">
+        <video id="camVideo" autoplay playsinline muted></video>
+        <div class="cam-grid"></div>
+      </div>
+      <div class="cam-bar">
+        <div class="cam-thumb" id="camThumb"></div>
+        <div class="cam-shutter" id="camShutter"></div>
+        <div class="cam-placeholder"></div>
+      </div>
+    </div>
+
+    <!-- GALLERY -->
+    <div class="screen-page" id="gallery">
+      <div class="actionbar">
+        <div class="ab-up" id="galBack"><img src="assets/aosp_ab_back.png" alt=""></div>
+        <div class="ab-title">图库</div>
+      </div>
+      <div class="gal-grid" id="galGrid"></div>
+      <div id="galView"><div class="gal-close">×</div><img id="galViewImg" alt=""></div>
+    </div>
+
+    <!-- ============ BROWSER ============ -->
+    <div class="screen-page" id="browser">
+      <div class="ab">
+        <div class="ab-up" id="browserBack"><img src="assets/aosp_ab_back.png" alt=""></div>
+        <div class="ab-title" style="flex:0 0 auto;margin-right:8px">浏览器</div>
+        <div class="br-url"><span id="brUrl">书签</span></div>
+        <div class="ab-action" id="brTabs"><svg viewBox="0 0 24 24"><use href="#i-browser"/></svg></div>
+        <div class="ab-action" id="brMenu"><svg viewBox="0 0 24 24"><use href="#i-msg"/></svg></div>
+      </div>
+      <div class="br-body" id="brBody"></div>
+    </div>
+
+    <!-- ============ CALENDAR ============ -->
+    <div class="screen-page" id="calendar">
+      <div class="ab">
+        <div class="ab-up" id="calBack"><img src="assets/aosp_ab_back.png" alt=""></div>
+        <div class="ab-title" id="calTitle">2026年8月</div>
+        <div class="ab-action" id="calPrev"><svg viewBox="0 0 24 24"><use href="#i-back"/></svg></div>
+        <div class="ab-action" id="calNext"><svg viewBox="0 0 24 24" style="transform:scaleX(-1)"><use href="#i-back"/></svg></div>
+      </div>
+      <div class="cal-week"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
+      <div class="cal-grid" id="calGrid"></div>
+    </div>
+
+    <!-- ============ CLOCK / DESKCLOCK ============ -->
+    <div class="screen-page" id="clock">
+      <div class="ab"><div class="ab-up" id="clockBack"><img src="assets/aosp_ab_back.png" alt=""></div><div class="ab-title">时钟</div>
+        <div class="ab-action" id="clkAdd"><svg viewBox="0 0 24 24"><use href="#i-compose"/></svg></div></div>
+      <div class="clk-tabs" id="clkTabs">
+        <div class="clk-tab on" data-t="alarm">闹钟</div>
+        <div class="clk-tab" data-t="world">世界时间</div>
+        <div class="clk-tab" data-t="timer">计时器</div>
+        <div class="clk-tab" data-t="stop">秒表</div>
+      </div>
+      <div class="clk-body" id="clkBody"></div>
+    </div>
+
+    <!-- ============ CALCULATOR ============ -->
+    <div class="screen-page" id="calculator">
+      <div class="ab"><div class="ab-up" id="calcBack"><img src="assets/aosp_ab_back.png" alt=""></div><div class="ab-title">计算器</div></div>
+      <div class="calc-disp" id="calcDisp">0</div>
+      <div class="calc-keys" id="calcKeys">
+        <button class="ck fun" data-k="C">C</button>
+        <button class="ck fun" data-k="+/-">+/−</button>
+        <button class="ck fun" data-k="%">%</button>
+        <button class="ck op" data-k="÷">÷</button>
+        <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button><button class="ck op" data-k="×">×</button>
+        <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button><button class="ck op" data-k="−">−</button>
+        <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button><button class="ck op" data-k="+">+</button>
+        <button class="ck zero" data-k="0">0</button><button data-k=".">.</button><button class="ck op eq" data-k="=">=</button>
+      </div>
+    </div>
+
+    <!-- ============ EMAIL ============ -->
+    <div class="screen-page" id="email">
+      <div class="ab"><div class="ab-up" id="emailBack"><img src="assets/aosp_ab_back.png" alt=""></div>
+        <div class="ab-title" id="emailTitle">收件箱</div>
+        <div class="ab-action" id="emailCompose"><svg viewBox="0 0 24 24"><use href="#i-compose"/></svg></div></div>
+      <div class="email-list" id="emailList"></div>
+    </div>
+
+    <!-- ============ MUSIC ============ -->
+    <div class="screen-page" id="music">
+      <div class="ab"><div class="ab-up" id="musicBack"><img src="assets/aosp_ab_back.png" alt=""></div><div class="ab-title">音乐</div></div>
+      <div class="music-list" id="musicList"></div>
+      <div class="nowplaying" id="nowplaying">
+        <div class="np-art" id="npArt"></div>
+        <div class="np-info"><div class="np-title" id="npTitle">—</div><div class="np-artist" id="npArtist"></div></div>
+        <div class="np-prog"><div class="np-prog-f" id="npProgF"></div></div>
+        <div class="np-ctrl">
+          <div class="np-b" id="npPrev"><svg viewBox="0 0 24 24"><use href="#i-prev"/></svg></div>
+          <div class="np-b" id="npPlay"><svg viewBox="0 0 24 24"><use href="#i-play"/></svg></div>
+          <div class="np-b" id="npNext"><svg viewBox="0 0 24 24"><use href="#i-next"/></svg></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ CONTACTS ============ -->
+    <div class="screen-page" id="contacts">
+      <div class="ab"><div class="ab-up" id="contactsBack"><img src="assets/aosp_ab_back.png" alt=""></div>
+        <div class="ab-title" id="contactsTitle">联系人</div>
+        <div class="ab-action" id="contactsAdd"><svg viewBox="0 0 24 24"><use href="#i-compose"/></svg></div></div>
+      <div class="contacts-list" id="contactsList"></div>
+      <div class="contact-detail" id="contactDetail"></div>
+    </div>
+
+    <!-- ============ DOWNLOADS ============ -->
+    <div class="screen-page" id="downloads">
+      <div class="ab"><div class="ab-up" id="downloadsBack"><img src="assets/aosp_ab_back.png" alt=""></div><div class="ab-title">下载内容</div></div>
+      <div class="dl-list" id="dlList"></div>
+    </div>
+
+    <!-- ============ SOUND RECORDER ============ -->
+    <div class="screen-page" id="recorder">
+      <div class="ab"><div class="ab-up" id="recorderBack"><img src="assets/aosp_ab_back.png" alt=""></div><div class="ab-title">录音机</div></div>
+      <div class="rec-main">
+        <div class="rec-time" id="recTime">00:00</div>
+        <div class="rec-btn" id="recBtn"><svg viewBox="0 0 24 24" id="recIcon"><use href="#i-mic"/></svg></div>
+        <div class="rec-hint" id="recHint">点击开始录音</div>
+      </div>
+      <div class="rec-list" id="recList2"></div>
+    </div>
+
+    <!-- RECENTS / MULTITASKING -->
+    <div class="screen-page" id="recents">
+      <div class="rec-head">最近使用的应用程序</div>
+      <div class="rec-list" id="recList"></div>
+    </div>
+
+    <!-- NOTIFICATION DRAWER -->
+    <div id="notif">
+      <div class="notif-bar">
+        <div class="notif-date" id="notifDate">星期日 8月9日</div>
+        <div class="notif-icon-btn" id="notifSettings" title="快速设置"><img src="assets/ic_notify_quicksettings_normal.png" alt=""></div>
+        <div class="notif-icon-btn" id="notifClear" title="清除"><img src="assets/ic_notify_clear_normal.png" alt=""></div>
+      </div>
+      <div class="notif-hr"></div>
+      <!-- Quick Settings grid (Android 4.2 QuickSettings tiles) -->
+      <div class="qs-panel" id="qsPanel">
+        <div class="qs-grid">
+          <div class="qs-tile on" data-k="wifi"><img src="assets/ic_qs_wifi_full_4.png" alt=""><span>Wi-Fi</span></div>
+          <div class="qs-tile on" data-k="signal"><img src="assets/ic_qs_signal_full_4.png" alt=""><span>信号</span></div>
+          <div class="qs-tile off" data-k="bluetooth"><img src="assets/ic_qs_bluetooth_off.png" alt=""><span>蓝牙</span></div>
+          <div class="qs-tile off" data-k="airplane"><img src="assets/ic_qs_airplane_off.png" alt=""><span>飞行模式</span></div>
+          <div class="qs-tile on" data-k="rotate"><img src="assets/ic_qs_auto_rotate.png" alt=""><span>自动旋转</span></div>
+          <div class="qs-tile on" data-k="location"><img src="assets/ic_qs_location.png" alt=""><span>定位</span></div>
+          <div class="qs-tile off" data-k="alarm"><img src="assets/ic_qs_alarm_on.png" alt=""><span>闹钟</span></div>
+          <div class="qs-tile" data-k="settings" data-go="1"><img src="assets/ic_qs_settings.png" alt=""><span>设置</span></div>
+        </div>
+        <div class="qs-brightness">
+          <img class="qs-bric" src="assets/ic_qs_brightness_auto_on.png" alt="">
+          <div class="qs-sld"><div class="qs-sld-f" style="width:55%"></div><i class="qs-sld-t" style="left:55%"></i></div>
+        </div>
+      </div>
+      <div class="notif-hr"></div>
+      <div class="notif-list" id="notifList"></div>
+    </div>
+
+    <!-- ICS Easter Egg: PlatLogoActivity (com.android.internal.app.PlatLogoActivity) -->
+    <div class="screen-page" id="platlogo">
+      <div class="platlogo-stage">
+        <div class="platlogo-content" id="platlogoContent">
+          <svg class="platlogo-bugdroid" viewBox="0 0 64 80">
+            <!-- ICS bugdroid head + antennae (platlogo) -->
+            <g fill="none" stroke="#9bd441" stroke-width="2.2" stroke-linecap="round">
+              <line x1="21" y1="4" x2="17" y2="13"/>
+              <line x1="43" y1="4" x2="47" y2="13"/>
+              <circle cx="15" cy="2.6" r="2" fill="#9bd441" stroke="none"/>
+              <circle cx="49" cy="2.6" r="2" fill="#9bd441" stroke="none"/>
+            </g>
+            <g fill="#9bd441">
+              <circle cx="32" cy="21" r="14.5"/>
+              <ellipse cx="25.5" cy="23" rx="3" ry="3.4" fill="#fff"/>
+              <ellipse cx="38.5" cy="23" rx="3" ry="3.4" fill="#fff"/>
+              <circle cx="25.5" cy="23.5" r="1.6" fill="#000"/>
+              <circle cx="38.5" cy="23.5" r="1.6" fill="#000"/>
+              <rect x="13" y="35" width="38" height="33" rx="5"/>
+              <rect x="19" y="41" width="6.5" height="21" rx="3.2"/>
+              <rect x="38.5" y="41" width="6.5" height="21" rx="3.2"/>
+              <rect x="25" y="68" width="6.5" height="11" rx="3.2"/>
+              <rect x="32.5" y="68" width="6.5" height="11" rx="3.2"/>
+            </g>
+          </svg>
+          <div class="platlogo-text">
+            <div class="platlogo-version">Android</div>
+            <div class="platlogo-version-sub">4.0</div>
+            <div class="platlogo-name">Ice Cream Sandwich</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ICS Easter Egg: Nyandroid (com.android.systemui.Nyandroid) — Nyan Cat screensaver -->
+    <div class="screen-page" id="nyandroid">
+      <div class="nyandroid-board" id="nyandroidBoard"></div>
+    </div>
+
+    <!-- nav bar (real AOSP ic_sysbar_* assets, ICS NavigationBarView) -->
+    <div class="navbar">
+      <div class="nav-sp"></div>
+      <div class="nav" id="navBack"><img src="assets/aosp_sysbar_back.png" alt="返回"></div>
+      <div class="nav-sp flex"></div>
+      <div class="nav" id="navHome"><img src="assets/aosp_sysbar_home.png" alt="主页"></div>
+      <div class="nav-sp flex"></div>
+      <div class="nav" id="navRecent"><img src="assets/aosp_sysbar_recent.png" alt="最近任务"></div>
+      <div class="nav-sp"></div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+  </div>
+</div>
+
+<script>
+  const $=s=>document.querySelector(s);
+  const screens={lock:$('#lock'),home:$('#home'),drawer:$('#drawer'),settings:$('#settings'),dialer:$('#dialer'),messaging:$('#messaging'),camera:$('#camera'),gallery:$('#gallery'),recents:$('#recents'),browser:$('#browser'),calendar:$('#calendar'),clock:$('#clock'),calculator:$('#calculator'),email:$('#email'),music:$('#music'),contacts:$('#contacts'),downloads:$('#downloads'),recorder:$('#recorder'),platlogo:$('#platlogo'),nyandroid:$('#nyandroid')};
+  // apps that count as "recent" tasks (ICS multitasking)
+  const APP_META={
+    dialer:{n:'电话',d:'拨号',img:'assets/aosp_launcher_phone.png',c:'linear-gradient(135deg,#1b3a57,#0f2233)'},
+    messaging:{n:'信息',d:'短信',img:'assets/aosp_launcher_sms.png',c:'linear-gradient(135deg,#1f4d2e,#10281a)'},
+    settings:{n:'设置',d:'系统设置',img:'assets/aosp_launcher_settings.png',c:'linear-gradient(135deg,#2a2a2a,#141414)'},
+    camera:{n:'相机',d:'拍照',img:'assets/aosp_launcher_camera.png',c:'linear-gradient(135deg,#262626,#000)'},
+    gallery:{n:'图库',d:'照片',img:'assets/aosp_launcher_gallery.png',c:'linear-gradient(135deg,#3a2440,#1a1020)'},
+    browser:{n:'浏览器',d:'网页',img:'assets/aosp_launcher_browser.png',c:'linear-gradient(135deg,#1f3a4d,#0f1f2b)'},
+    calendar:{n:'日历',d:'日程',img:'assets/aosp_launcher_cal.png',c:'linear-gradient(135deg,#3a2f1f,#1a140c)'},
+    clock:{n:'时钟',d:'闹钟',svg:'lc',c:'linear-gradient(135deg,#2c2c2c,#141414)'},
+    calculator:{n:'计算器',d:'计算',img:'assets/aosp_launcher_calc.png',c:'linear-gradient(135deg,#222,#000)'},
+    email:{n:'邮件',d:'邮箱',svg:'le',c:'linear-gradient(135deg,#1f4d5e,#0f2832)'},
+    music:{n:'音乐',d:'播放',img:'assets/aosp_launcher_music.png',c:'linear-gradient(135deg,#3a2440,#1a1020)'},
+    contacts:{n:'联系人',d:'通讯录',img:'assets/aosp_launcher_contacts.png',c:'linear-gradient(135deg,#2a2a2a,#141414)'},
+    downloads:{n:'下载',d:'文件',svg:'ld',c:'linear-gradient(135deg,#1f3a4d,#0f1f2b)'},
+    recorder:{n:'录音机',d:'录音',img:'assets/aosp_launcher_rec.png',c:'linear-gradient(135deg,#2a2a2a,#141414)'},
+  };
+  let RECENTS=[];
+  function pushRecent(id){if(!APP_META[id])return;RECENTS=RECENTS.filter(x=>x!==id);RECENTS.unshift(id);if(RECENTS.length>12)RECENTS=RECENTS.slice(0,12);}
+  let pendingFrom=null;
+  function show(id){
+    let fromRect=null;
+    if(pendingFrom){fromRect=pendingFrom.getBoundingClientRect();pendingFrom=null;}
+    Object.values(screens).forEach(s=>s.classList.remove('on','app-open','drawer-open'));
+    screens[id].classList.add('on');
+    // wallpaper only on home / lock — other screens have their own opaque background
+    const wp=document.querySelector('.wallpaper');
+    if(wp) wp.style.display=(id==='home'||id==='lock')?'block':'none';
+    if(id==='drawer'){screens[id].classList.add('drawer-open');setTimeout(()=>screens[id].classList.remove('drawer-open'),320);}
+    if(fromRect){
+      const r=screens[id].getBoundingClientRect();
+      const dx=fromRect.left+fromRect.width/2-(r.left+r.width/2);
+      const dy=fromRect.top+fromRect.height/2-(r.top+r.height/2);
+      const sc=fromRect.width/r.width;
+      const el=screens[id];
+      el.style.setProperty('--ox',dx+'px');
+      el.style.setProperty('--oy',dy+'px');
+      el.style.setProperty('--os',sc);
+      el.classList.add('app-open');
+      setTimeout(()=>el.classList.remove('app-open'),300);
+    }
+    if(APP_META[id])pushRecent(id);
+    screens[id].scrollTop=0;
+    if(id==='home' && !window.__homeInit){window.__homeInit=true;requestAnimationFrame(()=>{const ws=$('#workspace');if(ws)ws.scrollLeft=2*ws.clientWidth;});}
+    if(id==='settings'){settingsStack.length=0;settingsStack.push('root');renderSettingsNode('root');if($('#setTitle'))$('#setTitle').textContent='设置';}
+    if(id==='camera'){startCam();updateCamThumb();}else{stopCam();}
+    if(id==='gallery')renderGallery();
+    updateNav();}
+  function t(msg){const el=$('#toast');el.textContent=msg;el.classList.add('show');clearTimeout(t._);t._=setTimeout(()=>el.classList.remove('show'),1400);}
+
+  /* ---- app definitions (official AOSP icons where available) ---- */
+  const A=[
+    {n:'电话',img:'assets/aosp_launcher_phone.png',go:()=>show('dialer')},
+    {n:'信息',img:'assets/aosp_launcher_sms.png',go:()=>show('messaging')},
+    {n:'浏览器',img:'assets/aosp_launcher_browser.png',go:()=>show('browser')},
+    {n:'相机',img:'assets/aosp_launcher_camera.png',go:()=>show('camera')},
+    {n:'图库',img:'assets/aosp_launcher_gallery.png',go:()=>show('gallery')},
+    {n:'日历',img:'assets/aosp_launcher_cal.png',go:()=>show('calendar')},
+    {n:'时钟',svg:'lc',go:()=>show('clock')},
+    {n:'计算器',img:'assets/aosp_launcher_calc.png',go:()=>show('calculator')},
+    {n:'邮件',svg:'le',go:()=>show('email')},
+    {n:'音乐',img:'assets/aosp_launcher_music.png',go:()=>show('music')},
+    {n:'联系人',img:'assets/aosp_launcher_contacts.png',go:()=>show('contacts')},
+    {n:'下载',svg:'ld',go:()=>show('downloads')},
+    {n:'录音机',img:'assets/aosp_launcher_rec.png',go:()=>show('recorder')},
+    {n:'设置',img:'assets/aosp_launcher_settings.png',go:()=>show('settings')},
+  ];
+  function iconHTML(a){return a.img?`<img class="${a.muted?'muted':''}" src="${a.img}" alt="">`:`<svg viewBox="0 0 24 24"><use href="#i-${a.svg}"/></svg>`;}
+  function appHTML(a){return `<div class="app ripple" data-n="${a.n}"><div class="tile">${iconHTML(a)}</div><span class="lbl">${a.n}</span></div>`;}
+  function bindApps(el){el.querySelectorAll('.app').forEach(d=>{const a=A.find(x=>x.n===d.dataset.n);d.addEventListener('click',e=>{pendingFrom=e.currentTarget;e.stopPropagation();a.go();});});}
+
+  // ===== home: 5 swipeable ICS workspace pages (4x4), default center =====
+  (function buildHome(){
+    const WS=5, start=2, per=16;
+    const ws=$('#workspace');
+    ws.innerHTML=Array.from({length:WS},(_,p)=>`<div class="ws-page" data-p="${p}"></div>`).join('');
+    const pages=ws.querySelectorAll('.ws-page');
+    A.slice(0,12).forEach((a,i)=>{const p=Math.min(start+Math.floor(i/per),WS-1);pages[p].insertAdjacentHTML('beforeend',appHTML(a));});
+    bindApps(ws);
+    const ind=$('#pageInd');
+    ind.innerHTML=Array.from({length:WS},(_,i)=>`<i class="${i===start?'on':''}" data-p="${i}"></i>`).join('');
+    ind.querySelectorAll('i').forEach(d=>d.addEventListener('click',()=>{$('#workspace').scrollTo({left:(+d.dataset.p)*$('#workspace').clientWidth,behavior:'smooth'});}));
+    ws.addEventListener('scroll',()=>{const p=Math.round(ws.scrollLeft/ws.clientWidth);ind.querySelectorAll('i').forEach((d,i)=>d.classList.toggle('on',i===p));});
+    window.__homeInit=false;
+  })();
+
+  $('#dock').innerHTML=
+    [A[0],A[2],null,A[1],A[8]].map(a=>a?appHTML(a):`<div class="apps-btn ripple" id="appsBtn" title="应用"><svg viewBox="0 0 24 24"><use href="#i-apps"/></svg></div>`).join('');
+  bindApps($('#dock'));
+  $('#appsBtn').addEventListener('click',()=>show('drawer'));
+
+  // ===== app drawer: Apps | Widgets tabs (ICS AppsCustomize) =====
+  $('#drawerGrid').innerHTML=A.map(appHTML).join('');
+  bindApps($('#drawerGrid'));
+  $('#drawerWidgets').innerHTML=[
+    {t:'数字时钟',d:'桌面大号时间与日期'},
+    {t:'月历',d:'当月日历视图'},
+    {t:'电量',d:'电池电量与预估'},
+    {t:'音乐播放',d:'正在播放控制条'},
+    {t:'相框',d:'展示一张照片'},
+    {t:'快速搜索',d:'Google 搜索框'},
+  ].map(w=>`<div class="wcard"><div class="wt">${w.t}</div><div>${w.d}</div></div>`).join('');
+  function setDrawerTab(t){const a=t==='apps';$('#tabApps').classList.toggle('on',a);$('#tabWidgets').classList.toggle('on',!a);$('#drawerGrid').classList.toggle('on',a);$('#drawerWidgets').classList.toggle('on',!a);}
+  $('#tabApps').addEventListener('click',()=>setDrawerTab('apps'));
+  $('#tabWidgets').addEventListener('click',()=>setDrawerTab('widgets'));
+
+  /* ===== Settings: full navigable tree (drill down to deepest level) ===== */
+  function sIcon(it){
+    if(it.img) return `<img src='${it.img}' alt=''>`;
+    if(it.svg) return `<svg viewBox='0 0 24 24'><use href='#${it.svg}'/></svg>`;
+    return '';
+  }
+  function sRow(it){
+    let right='';
+    if(it.sw!==undefined) right+=`<div class='switch ${it.sw?'on':''}' data-sw='${it.key||''}'><i></i></div>`;
+    else if(it.chk) right+=`<img class='chkimg' data-chk src='assets/aosp_check_on.png'>`;
+    else if(it.slider) right+=`<div class='sld' data-sld='${it.key}'><div class='sld-f' style='width:${it.val||50}%'></div><i class='sld-t' style='left:${it.val||50}%'></i></div>`;
+    else if(it.v) right+=`<div class='val'>${it.v}</div>`;
+    if((it.go||it.action)&&it.chev!==false) right+=`<div class='chev'>›</div>`;
+    const cls=(it.go||it.action)?'item ripple':'item';
+    return `<div class='${cls}' ${it.go?`data-go='${it.go}'`:''} ${it.action?`data-action='${it.action}'`:''} ${it.app?`data-app='${it.app}'`:''} ${it.egg?`data-egg='1'`:''}>
+      <div class='ic'>${sIcon(it)}</div><div class='body'><div class='t'>${it.t}</div>${it.s?`<div class='s'>${it.s}</div>`:''}</div>${right}</div>`;
+  }
+  function renderSettingsNode(key){
+    const n=SETTREE[key]; if(!n) return;
+    let html='';
+    const renderItem=it=>{
+      if(it.kind==='apphead'){
+        const m=it.meta;
+        return `<div class="apphead"><div class="apphead-icon" style="background:${m.c}">${m.img?`<img src="${m.img}" alt="">`:''}</div><div class="apphead-text"><div class="apphead-name">${m.n}</div><div class="apphead-ver">版本 1.0.0（1）</div></div></div>`;
+      }
+      if(it.kind==='storage'){
+        const pct=Math.round(it.app/it.total*100);
+        return `<div class="appstorage"><div class="appstorage-bar"><div class="appstorage-fill" style="width:${pct}%"></div></div><div class="appstorage-row"><span>应用</span><span class="appstorage-v">${it.app} MB</span></div></div>`;
+      }
+      if(it.kind==='grp') return `<div class="grp-title">${it.label}</div>`;
+      if(it.kind==='btnrow'){
+        return `<div class="btnrow">${it.btns.map(b=>`<button class="hbtn" data-action="${b[1]}">${b[0]}</button>`).join('')}</div>`;
+      }
+      if(it.kind==='kv') return `<div class="kv-row"><span class="kv-k">${it.k}</span><span class="kv-v">${it.v}</span></div>`;
+      if(it.kind==='perm') return `<div class="perm-row"><span class="perm-k">${it.k}</span><span class="perm-v">${it.n}</span></div>`;
+      return sRow(it);
+    };
+    if(n.groups){ n.groups.forEach(g=>{ html+=`<div class='grp-title'>${g.name}</div>`; g.items.forEach(it=>html+=renderItem(it)); }); }
+    else { (n.items||[]).forEach(it=>{ if(it.group!==undefined) html+=`<div class='grp-title'>${it.group}</div>`; else html+=renderItem(it); }); }
+    $('#settingsList').innerHTML=html;
+  }
+  function appItems(){ return A.map(a=>({t:a.n,img:a.img,app:a.n,action:'appinfo'})); }
+  const SETTREE={
+    root:{groups:[
+      {name:'无线和网络',items:[
+        {t:'WLAN',s:'已连接 · MyHome_2.4G',img:'assets/aosp_set_wireless.png',go:'wlan'},
+        {t:'蓝牙',s:'关闭',img:'assets/aosp_set_bluetooth.png',go:'bt'},
+        {t:'流量使用情况',img:'assets/aosp_set_data.png',go:'data'},
+        {t:'更多…',img:'assets/ic_settings_wireless.png',go:'more'},
+      ]},
+      {name:'设备',items:[
+        {t:'声音',img:'assets/aosp_set_sound.png',go:'sound'},
+        {t:'显示',img:'assets/aosp_set_display.png',go:'display'},
+        {t:'存储',s:'已用 4.2 GB',img:'assets/aosp_set_storage.png',go:'storage'},
+        {t:'电池',img:'assets/aosp_set_battery.png',go:'battery'},
+        {t:'应用',img:'assets/aosp_set_apps.png',go:'apps'},
+      ]},
+      {name:'个人',items:[
+        {t:'位置服务',s:'GPS 已开启',img:'assets/aosp_set_location.png',sw:true},
+        {t:'账号与同步',img:'assets/aosp_set_sync.png',go:'accounts'},
+        {t:'安全',img:'assets/aosp_set_security.png',go:'security'},
+        {t:'语言与输入法',img:'assets/aosp_set_language.png',go:'language'},
+        {t:'备份和重置',img:'assets/aosp_set_backup.png',go:'backup'},
+      ]},
+      {name:'系统',items:[
+        {t:'底座',img:'assets/aosp_set_dock.png',go:'dock'},
+        {t:'日期和时间',img:'assets/aosp_set_datetime.png',go:'datetime'},
+        {t:'辅助功能',img:'assets/aosp_set_accessibility.png',go:'accessibility'},
+        {t:'关于手机',img:'assets/aosp_set_about.png',go:'about'},
+      ]},
+    ]},
+    wlan:{title:'WLAN',items:[
+      {t:'开启 WLAN',sw:true,key:'wlan_on'},
+      {group:'可用网络'},
+      {t:'MyHome_2.4G',s:'已连接',img:'assets/ic_settings_wifi.png',action:'conn'},
+      {t:'CMCC-Office',s:'安全',img:'assets/ic_settings_wifi.png',action:'conn'},
+      {t:'iPhone 热点',s:'安全',img:'assets/ic_settings_wifi.png',action:'conn'},
+      {t:'添加网络',img:'assets/ic_settings_wifi.png',action:'addnet'},
+    ]},
+    bt:{title:'蓝牙',items:[
+      {t:'开启蓝牙',sw:false,key:'bt_on'},
+      {group:'设备'},
+      {t:'搜索设备…',img:'assets/ic_settings_bluetooth.png',action:'scan'},
+    ]},
+    data:{title:'流量使用情况',items:[
+      {group:'本月'},
+      {t:'移动数据',s:'328 MB',img:'assets/ic_settings_data_usage.png',chev:false},
+      {t:'WLAN',s:'1.2 GB',img:'assets/ic_settings_wifi.png',chev:false},
+    ]},
+    more:{title:'更多…',items:[
+      {t:'飞行模式',sw:false,key:'air'},
+      {t:'VPN',img:'assets/ic_settings_wireless.png',chev:false},
+      {t:'移动网络',img:'assets/ic_settings_data_usage.png',chev:false},
+    ]},
+    sound:{title:'声音',items:[
+      {group:'音量'},
+      {t:'媒体',slider:true,val:60,key:'vol_media'},
+      {t:'铃声',slider:true,val:80,key:'vol_ring'},
+      {t:'闹钟',slider:true,val:70,key:'vol_alarm'},
+      {group:'其他'},
+      {t:'静音模式',sw:false,key:'mute'},
+      {t:'触觉反馈',sw:true,key:'haptic'},
+    ]},
+    display:{title:'显示',items:[
+      {group:'亮度'},
+      {t:'自动亮度',sw:true,key:'autobri'},
+      {t:'亮度',slider:true,val:55,key:'bri'},
+      {group:'屏幕'},
+      {t:'壁纸',s:'Holo 蓝',img:'assets/ic_settings_display.png',action:'wp'},
+      {t:'休眠',s:'30 秒后',img:'assets/ic_settings_display.png',chev:false},
+      {t:'字体大小',s:'普通',img:'assets/ic_settings_display.png',chev:false},
+    ]},
+    battery:{title:'电池',items:[
+      {t:'电量',s:'78% · 约 6 小时',img:'assets/ic_settings_battery.png',chev:false},
+      {group:'电量使用'},
+      {t:'屏幕',s:'42%',img:'assets/ic_settings_display.png',chev:false},
+      {t:'Android 系统',s:'18%',img:'assets/ic_settings_about.png',chev:false},
+      {t:'拨号',s:'9%',img:'assets/ic_settings_applications.png',chev:false},
+    ]},
+    storage:{title:'存储',items:[
+      {t:'已用',s:'4.2 GB',img:'assets/ic_settings_storage.png',chev:false},
+      {t:'可用',s:'11.6 GB',img:'assets/ic_settings_storage.png',chev:false},
+      {group:'应用'},
+      {t:'已安装应用',s:'23 个',img:'assets/ic_settings_applications.png',chev:false},
+    ]},
+    apps:{title:'应用',items:appItems()},
+    accounts:{title:'账号与同步',items:[
+      {t:'添加账号',img:'assets/ic_settings_sync.png',action:'addacc'},
+      {group:'已添加'},
+      {t:'Google',s:'已同步',img:'assets/ic_settings_sync.png',chev:false},
+    ]},
+    security:{title:'安全',items:[
+      {group:'屏幕锁定'},
+      {t:'无',s:'当前：滑动',img:'assets/ic_settings_security.png',action:'lockmode'},
+      {t:'图案',img:'assets/ic_settings_security.png',action:'lockmode'},
+      {t:'PIN',img:'assets/ic_settings_security.png',action:'lockmode'},
+      {t:'密码',img:'assets/ic_settings_security.png',action:'lockmode'},
+      {group:'其他'},
+      {t:'未知来源',s:'允许安装非商店应用',sw:false,key:'unk'},
+    ]},
+    privacy:{title:'隐私',items:[
+      {group:'权限'},
+      {t:'位置',s:'已授权 6 个应用',img:'assets/ic_settings_location.png',chev:false},
+      {t:'摄像头',s:'已授权 3 个应用',img:'assets/ic_settings_applications.png',chev:false},
+    ]},
+    about:{title:'关于手机',items:[
+      {t:'型号',s:'Galaxy Nexus',img:'assets/ic_settings_about.png',chev:false},
+      {t:'Android 版本',s:'4.0.4',img:'assets/ic_settings_about.png',chev:false,egg:1},
+      {t:'基带版本',s:'I9250XXLA2',img:'assets/ic_settings_applications.png',chev:false},
+      {t:'内核版本',s:'3.0.8-g3…',img:'assets/ic_settings_applications.png',chev:false},
+      {t:'版本号',s:'IMM76I',img:'assets/ic_settings_applications.png',chev:false},
+      {t:'状态',s:'已连接 Wi-Fi',img:'assets/ic_settings_wifi.png',chev:false},
+      {t:'法律信息',img:'assets/ic_settings_applications.png',chev:false},
+    ]},
+    language:{title:'语言与输入法',items:[
+      {group:'语言'},
+      {t:'中文（简体）',s:'默认',img:'assets/ic_settings_applications.png',action:'lang',chev:false},
+      {t:'English',img:'assets/ic_settings_applications.png',action:'lang',chev:false},
+      {t:'日本語',img:'assets/ic_settings_applications.png',action:'lang',chev:false},
+      {group:'键盘与输入法'},
+      {t:'Android 键盘',s:'已启用',sw:true,key:'kb'},
+      {t:'语音搜索',sw:false,key:'vsearch'},
+    ]},
+    backup:{title:'备份和重置',items:[
+      {t:'备份我的数据',s:'Google 账号',sw:true,key:'bk'},
+      {t:'自动恢复',s:'已开启',sw:true,key:'bkres'},
+      {group:''},
+      {t:'恢复出厂设置',img:'assets/ic_settings_applications.png',action:'factory'},
+    ]},
+    dock:{title:'底座',items:[
+      {t:'基座音频',s:'已开启媒体音频',sw:true,key:'dockaudio'},
+      {t:'音频基座',s:'已停用',sw:false,key:'audiodock'},
+    ]},
+    datetime:{title:'日期和时间',items:[
+      {t:'自动日期和时间',s:'使用网络时间',sw:true,key:'autodt'},
+      {t:'自动时区',sw:true,key:'autotz'},
+      {t:'设置日期',s:'2026-08-09',img:'assets/ic_settings_applications.png',action:'setdate'},
+      {t:'设置时间',s:'21:06',img:'assets/ic_settings_applications.png',action:'settime'},
+      {t:'使用 24 小时格式',sw:true,key:'24h'},
+      {t:'选择时区',s:'GMT+08:00',img:'assets/ic_settings_applications.png',action:'tz'},
+    ]},
+    accessibility:{title:'辅助功能',items:[
+      {group:'系统'},
+      {t:'随选朗读',sw:false,key:'scread'},
+      {t:'放大手势',sw:false,key:'magnify'},
+      {t:'触摸和按住延迟',s:'中等',img:'assets/ic_settings_applications.png',action:'touch'},
+      {t:'自动旋转屏幕',sw:true,key:'autorot'},
+    ]},
+  };
+  let settingsStack=[];
+  function openSettings(key){ settingsStack.push(key); renderSettingsNode(key); if($('#setTitle'))$('#setTitle').textContent=SETTREE[key].title||'设置'; }
+  function settingsBack(){ if(settingsStack.length>1){ settingsStack.pop(); const k=settingsStack[settingsStack.length-1]; renderSettingsNode(k); if($('#setTitle'))$('#setTitle').textContent=SETTREE[k].title||'设置'; } else { show('home'); } }
+  function doSettingsAction(a){
+    if(a==='appinfo'){ const name=window._appName; const meta=APP_META[A.findIndex(x=>x.n===name)] || {n:name,img:'',c:'#333'};
+      const node={title:name,items:[
+        {kind:'apphead',meta:meta},
+        {kind:'storage',app:12.4,user:4.4,total:16.8},
+        {kind:'grp',label:'操作'},
+        {kind:'btnrow',btns:[['强制停止','forcestop'],['卸载','uninstall']]},
+        {kind:'grp',label:'存储'},
+        {kind:'kv',k:'总计',v:'16.8 MB'},{kind:'kv',k:'应用',v:'12.4 MB'},{kind:'kv',k:'用户数据',v:'4.4 MB'},{kind:'kv',k:'缓存',v:'0 B'},
+        {kind:'grp',label:'权限'},
+        {kind:'perm',k:'电话',n:'2 项权限'},{kind:'perm',k:'存储',n:'1 项权限'},{kind:'perm',k:'网络',n:'3 项权限'},{kind:'perm',k:'相机',n:'1 项权限'},{kind:'perm',k:'已使用',n:'0 项权限'},
+        {kind:'grp',label:'通知'},
+        {kind:'kv',k:'已开启通知',v:'否（已屏蔽）'},
+      ]};
+      SETTREE['_app']=node; openSettings('_app'); return; }
+    const map={conn:'已连接到网络',addnet:'打开“添加网络”',scan:'正在搜索蓝牙设备…',addacc:'添加账号',lockmode:'选择屏幕锁定方式',wp:'正在更换壁纸',cleardata:'已清除数据',forcestop:'已强制停止',uninstall:'已卸载'};
+    t(map[a]||'操作');
+  }
+  $('#settingsList').addEventListener('click',e=>{
+    const sw=e.target.closest('[data-sw]'); if(sw){ sw.classList.toggle('on'); return; }
+    const chk=e.target.closest('[data-chk]'); if(chk){ const on=chk.dataset.on!=='0'; chk.dataset.on=on?'0':'1'; chk.src=on?'assets/aosp_check_off.png':'assets/aosp_check_on.png'; return; }
+    const row=e.target.closest('.item'); if(!row) return;
+    if(row.dataset.egg){ eggTap(); return; }
+    if(row.dataset.go) return openSettings(row.dataset.go);
+    if(row.dataset.action){ window._appName=row.dataset.app; return doSettingsAction(row.dataset.action); }
+  });
+  $('#settingsList').addEventListener('pointerdown',e=>{
+    const sld=e.target.closest('.sld'); if(!sld) return; e.preventDefault();
+    const move=ev=>{ const r=sld.getBoundingClientRect(); let p=(ev.clientX-r.left)/r.width; p=Math.max(0,Math.min(1,p));
+      sld.querySelector('.sld-f').style.width=(p*100)+'%'; sld.querySelector('.sld-t').style.left=(p*100)+'%'; sld.dataset.val=Math.round(p*100); };
+    move(e); const up=()=>{ window.removeEventListener('pointermove',move); window.removeEventListener('pointerup',up); };
+    window.addEventListener('pointermove',move); window.addEventListener('pointerup',up);
+  });
+  $('#setBack').addEventListener('click',settingsBack);
+
+  /* ===== ICS Easter Egg (com.android.internal.app.PlatLogoActivity + com.android.systemui.Nyandroid) =====
+     Trigger: Settings → About phone → tap "Android 版本" 3 times within 500ms (DeviceInfoSettings.mHits[3] logic).
+     PlatLogoActivity: shows the PlatLogo ImageView, tap = toast "Android 4.0: Ice Cream Sandwich";
+       long-press (2× long-press-timeout = 1000ms) kicks the mSuperLongPress loop, scaling 1.25/1.5/2.0/2.5,
+       then launches Nyandroid.
+     Nyandroid: Board extends FrameLayout, background #003366, 20 stars + 20 FlyingCats (Android + rainbow
+       trail) flying L→R with random size/speed/z, looping. Any touch exits. */
+  const eggHits=[0,0,0];
+  function eggTap(){
+    eggHits[0]=eggHits[1]; eggHits[1]=eggHits[2]; eggHits[2]=Date.now();
+    if(eggHits[0] && eggHits[0] >= Date.now()-500){ eggHits[0]=eggHits[1]=eggHits[2]=0; openPlatLogo(); }
+  }
+
+  function openPlatLogo(){
+    const c=$('#platlogoContent');
+    c.style.transform='scale(1)';
+    show('platlogo');
+    // Wait a frame then bind listeners (avoid duplicate bindings if re-opened)
+    requestAnimationFrame(()=>bindPlatLogo(c));
+  }
+  function bindPlatLogo(c){
+    const LPT=500;                            // ViewConfiguration.getLongPressTimeout()
+    let pressed=false, count=0, lpTimer=null, stepTimer=null;
+    function resetVisual(){ c.style.transform='scale(1)'; }
+    function startLongPress(){
+      pressed=true; count=0; resetVisual();
+      clearTimeout(lpTimer); clearTimeout(stepTimer);
+      // 2 × long-press-timeout initial delay (mSuperLongPress posted with 2*LPT)
+      lpTimer = setTimeout(()=>{
+        // mSuperLongPress.run()
+        count++;
+        const scale = 1 + 0.25 * count * count;
+        c.style.transform = `scale(${scale})`;
+        if(count <= 3){
+          stepTimer = setTimeout(()=>{ if(pressed) startLongPress(); }, LPT);  // recursive — same LPT
+        } else {
+          // count > 3 → startActivity(Nyandroid).finish()
+          clearTimeout(lpTimer); clearTimeout(stepTimer);
+          openNyandroid();
+        }
+      }, 2*LPT);
+    }
+    function endLongPress(){
+      clearTimeout(lpTimer); clearTimeout(stepTimer);
+      if(pressed){
+        pressed=false;
+        // ACTION_UP logic: if not yet escalated (still scale 1), show toast
+        if(count===0){ t('Android 4.0: Ice Cream Sandwich'); }
+        resetVisual();
+      }
+    }
+    c.onmousedown = startLongPress;
+    c.onmouseup = endLongPress;
+    c.onmouseleave = endLongPress;
+    c.ontouchstart = e=>{ e.preventDefault(); startLongPress(); };
+    c.ontouchend = e=>{ e.preventDefault(); endLongPress(); };
+  }
+
+  let nyandroidRAF=null, nyandroidTimers=[];
+  function openNyandroid(){
+    // Clean up any previous instance
+    if(nyandroidRAF) cancelAnimationFrame(nyandroidRAF);
+    nyandroidTimers.forEach(id=>clearInterval(id)); nyandroidTimers=[];
+    const board=$('#nyandroidBoard');
+    board.innerHTML='';
+    show('nyandroid');
+    // Wait for layout
+    requestAnimationFrame(()=>{
+      const W=board.clientWidth, H=board.clientHeight;
+      const NUM_CATS=20;
+      const cats=[], stars=[];
+      // spawn 20 cat flying objects (Android + rainbow trail flying L→R)
+      for(let i=0;i<NUM_CATS;i++){
+        const cat=document.createElement('img');
+        cat.className='ncat';
+        cat.src='assets/nyan/nyandroid00.png';
+        let z=(i/NUM_CATS); z*=z;
+        const baseScale = 0.15 + 1.65 * z;       // 0.1 (far) ~ 1.8 (near)
+        const v = 100 + 900 * z;                 // VMIN..VMAX
+        // intrinsic 48px cell, scale applied via width/height
+        cat.style.width = (48 * baseScale) + 'px';
+        cat.style.height = (48 * baseScale) + 'px';
+        cat.style.top = Math.random()*H + 'px';
+        cat.style.left = (-(48*baseScale)+1) + 'px';
+        cat.dataset.v = v;
+        cat.dataset.scale = baseScale;
+        cats.push(cat);
+        board.appendChild(cat);
+      }
+      // spawn 20 fixed twinkling stars
+      for(let i=0;i<20;i++){
+        const star=document.createElement('img');
+        star.className='nstar';
+        star.src='assets/nyan/star0.png';
+        const scale = 0.1 + Math.random()*0.9;
+        star.style.width = (14 * scale) + 'px';
+        star.style.height = (14 * scale) + 'px';
+        star.style.left = Math.random()*W + 'px';
+        star.style.top = Math.random()*H + 'px';
+        stars.push(star);
+        board.appendChild(star);
+      }
+      // Shared frame animator: one rAF advances all 12 cat frames + 6 star frames
+      let catFrame=0, starFrame=0;
+      let catAcc=0, starAcc=0;
+      const FRAME_DT=1/60; // 60fps
+      const CAT_INTERVAL=80;   // ms per cat frame
+      const STAR_INTERVAL=200; // ms per star frame
+      let last=performance.now();
+      function tick(now){
+        const dt = now - last; last = now;
+        // advance cat frames every 80ms
+        catAcc += dt;
+        while(catAcc >= CAT_INTERVAL){
+          catFrame = (catFrame+1) % 12;
+          for(const c of cats) c.src = `assets/nyan/nyandroid${String(catFrame).padStart(2,'0')}.png`;
+          catAcc -= CAT_INTERVAL;
+        }
+        // advance star frames every 200ms
+        starAcc += dt;
+        while(starAcc >= STAR_INTERVAL){
+          starFrame = (starFrame+1) % 6;
+          for(const s of stars) s.src = `assets/nyan/star${starFrame}.png`;
+          starAcc -= STAR_INTERVAL;
+        }
+        // update cat positions
+        const dtSec = dt/1000;
+        for(const cat of cats){
+          const v = parseFloat(cat.dataset.v);
+          let x = parseFloat(cat.style.left) + v*dtSec;
+          cat.style.left = x + 'px';
+        }
+        // reset cats that went off the right edge
+        for(const cat of cats){
+          const scale = parseFloat(cat.dataset.scale);
+          const w = 48*scale;
+          if(parseFloat(cat.style.left) > W + 2){
+            cat.style.left = (-(48*scale)+1) + 'px';
+            cat.style.top = Math.random()*H + 'px';
+          }
+        }
+        nyandroidRAF = requestAnimationFrame(tick);
+      }
+      nyandroidRAF = requestAnimationFrame(tick);
+    });
+    // any click on the nyandroid screen exits (onUserInteraction → finish)
+    board.onclick = ()=>{
+      if(nyandroidRAF) cancelAnimationFrame(nyandroidRAF);
+      nyandroidRAF=null;
+      show('home');
+    };
+  }
+
+  /* ---- navigation bar ---- */
+  let stack=['lock'];
+  function updateNav(){}
+  $('#navBack').addEventListener('click',()=>{if(notifOpen){closeNotif();return;}const c=current();
+    if(c==='settings')settingsBack();
+    else if(['drawer','dialer','messaging','recents','browser','calendar','clock','calculator','email','music','contacts','downloads','recorder'].includes(c))show('home');else if(c==='home')t('已在主屏幕');});
+  $('#navHome').addEventListener('click',()=>{if(notifOpen)closeNotif();show('home');});
+  $('#navRecent').addEventListener('click',()=>{if(notifOpen)closeNotif();renderRecents();show('recents');});
+
+  /* ---- ripple feedback ---- */
+  function attachRipple(sel){document.querySelectorAll(sel).forEach(el=>{el.classList.add('ripple');
+    el.addEventListener('pointerdown',e=>{const r=el.getBoundingClientRect();const sz=Math.max(r.width,r.height);
+      const d=document.createElement('span');d.className='ripple-dot';
+      d.style.width=d.style.height=sz+'px';d.style.left=(e.clientX-r.left-sz/2)+'px';d.style.top=(e.clientY-r.top-sz/2)+'px';
+      el.appendChild(d);setTimeout(()=>d.remove(),600);});});}
+  attachRipple('.gsearch,.apps-btn,.ab-action,.nav,.drawer-tab');
+
+  /* ---- clock ---- */
+  function tick(){const d=new Date();const p=n=>String(n).padStart(2,'0');const s=p(d.getHours())+':'+p(d.getMinutes());
+    $('#sbClock').textContent=s;$('#lockTime').textContent=s;
+    const w='日一二三四五六'[d.getDay()];const date='星期'+w+' '+(d.getMonth()+1)+'月'+d.getDate()+'日';
+    $('#lockDate').textContent=date;
+    const nd=$('#notifDate'); if(nd)nd.textContent=date;}
+  tick();setInterval(tick,10000);
+
+  /* ---- lock MultiWaveView drag (ICS: drag RIGHT = unlock, LEFT = camera, snap-back) ---- */
+  const mwv=$('#mwv'),mHandle=$('#mwvHandle'),mUnlock=$('#mwvUnlock'),mCam=$('#mwvCam'),mRing=$('#mwvRing');
+  let drag=false,sx=0,dx=0;const pt=e=>e.touches?e.touches[0]:e;
+  const SNAP=45,MAX=95; // px threshold toward target (multiwaveview_snap_margin scaled)
+  function setHandleImg(pressed){mHandle.querySelector('img').src=pressed?'assets/lock_handle_pressed.png':'assets/lock_handle_normal.png';}
+  function setTargetImgs(unlockHot,camHot){
+    mUnlock.querySelector('img').src=unlockHot?'assets/lock_unlock_activated.png':'assets/lock_unlock_normal.png';
+    mCam.querySelector('img').src=camHot?'assets/lock_camera_activated.png':'assets/lock_camera_normal.png';
+    mUnlock.classList.toggle('hot',unlockHot);mCam.classList.toggle('hot',camHot);
+  }
+  function applyDrag(){
+    const d=Math.max(-MAX,Math.min(MAX,dx));
+    mHandle.style.transform=`translate(${d}px,0)`;
+    // outer ring stretches into an ellipse while dragging (multiwaveview scale x)
+    const k=1+Math.abs(d)/MAX*.45;
+    mRing.style.transform=`translate(-50%,-50%) scale(${k},1)`;
+    setTargetImgs(dx>SNAP/2,dx<-SNAP/2);
+  }
+  function startDrag(e){drag=true;sx=pt(e).clientX;setHandleImg(true);mHandle.classList.add('dragging');mRing.style.transition='none';mHandle.style.transition='none';}
+  function mv(e){if(!drag)return;dx=pt(e).clientX-sx;applyDrag();if(e.cancelable)e.preventDefault();}
+  function endDrag(){if(!drag)return;drag=false;setHandleImg(false);setTargetImgs(false,false);
+    const d=dx;dx=0;
+    mHandle.classList.remove('dragging');
+    mHandle.style.transition='';mRing.style.transition='';mRing.style.transform='';
+    if(d>SNAP)fly(160,()=>show('home'));            // right target = unlock
+    else if(d<-SNAP)fly(-160,()=>show('camera'));   // left target = camera
+    else mHandle.style.transform='';                // snap back
+  }
+  mHandle.addEventListener('mousedown',startDrag);
+  mHandle.addEventListener('touchstart',startDrag,{passive:true});
+  window.addEventListener('mousemove',mv);window.addEventListener('touchmove',mv,{passive:false});
+  window.addEventListener('mouseup',endDrag);window.addEventListener('touchend',endDrag);
+  function fly(d,act){mHandle.style.transition='transform .25s,opacity .25s';mHandle.style.transform=`translate(${d}px,0)`;mHandle.style.opacity='0';
+    setTimeout(()=>{act();mHandle.style.transition='';mHandle.style.transform='';mHandle.style.opacity='1';},260);}
+
+  /* ===== current screen helper ===== */
+  function current(){for(const[k,v]of Object.entries(screens))if(v.classList.contains('on'))return k;return null;}
+
+  /* ===== notification drawer (status-bar pull-down) ===== */
+  const notif=$('#notif');let notifOpen=false,sbDrag=false,sbY=0;
+  function openNotif(){notif.style.transition='transform .28s cubic-bezier(.2,.8,.2,1)';notif.style.transform='translateY(0)';notifOpen=true;}
+  function closeNotif(){notif.style.transition='transform .28s cubic-bezier(.2,.8,.2,1)';notif.style.transform='translateY(calc(-100% - 25px))';notifOpen=false;}
+  const sb=$('#statusbar');
+  sb.addEventListener('mousedown',e=>{sbDrag=true;sbY=e.clientY;notif.style.transition='none';});
+  sb.addEventListener('touchstart',e=>{sbDrag=true;sbY=e.touches[0].clientY;notif.style.transition='none';},{passive:true});
+  function sbMove(e){if(!sbDrag)return;const y=e.touches?e.touches[0].clientY:e.clientY;let d=y-sbY;if(d<0)d=0;if(d>notif.offsetHeight)d=notif.offsetHeight;notif.style.transform=`translateY(${d-notif.offsetHeight}px)`;if(e.cancelable)e.preventDefault();}
+  window.addEventListener('mousemove',sbMove);window.addEventListener('touchmove',sbMove,{passive:false});
+  function sbUp(e){if(!sbDrag)return;sbDrag=false;const y=e.changedTouches?e.changedTouches[0].clientY:e.clientY;const d=y-sbY;if(d<=8){notifOpen?closeNotif():openNotif();}else if(d>50){openNotif();}else{closeNotif();}}
+  window.addEventListener('mouseup',sbUp);window.addEventListener('touchend',sbUp);
+  /* quick settings: gear toggles the ICS SettingsView panel; rows interact like the tablet panel */
+  const qsPanel=$('#qsPanel');
+  $('#notifSettings').addEventListener('click',e=>{e.stopPropagation();qsPanel.classList.toggle('show');});
+  $('#notifClear').addEventListener('click',()=>{NOTIF.length=0;renderNotif();renderSbNotif();});
+  /* Quick Settings tile toggles (Android 4.2 QuickSettings tiles: on/off icon swap) */
+  const QS_ICONS={
+    wifi:['assets/ic_qs_wifi_full_4.png','assets/ic_qs_wifi_not_connected.png'],
+    signal:['assets/ic_qs_signal_full_4.png','assets/ic_qs_signal_full_4.png'],
+    bluetooth:['assets/ic_qs_bluetooth_on.png','assets/ic_qs_bluetooth_off.png'],
+    airplane:['assets/ic_qs_airplane_on.png','assets/ic_qs_airplane_off.png'],
+    rotate:['assets/ic_qs_auto_rotate.png','assets/ic_qs_rotation_locked.png'],
+    location:['assets/ic_qs_location.png','assets/ic_qs_location.png'],
+    alarm:['assets/ic_qs_alarm_on.png','assets/ic_qs_alarm_on.png'],
+  };
+  qsPanel.addEventListener('click',e=>{
+    const tile=e.target.closest('.qs-tile');
+    if(tile){
+      e.stopPropagation();
+      if(tile.dataset.go){closeNotif();show('settings');return;}
+      const on=tile.classList.toggle('on');tile.classList.toggle('off',!on);
+      const pair=QS_ICONS[tile.dataset.k];
+      if(pair){const img=tile.querySelector('img');img.src=on?pair[0]:pair[1];}
+      return;
+    }
+  });
+  /* brightness slider drag (ToggleSlider) */
+  const qsSld=document.querySelector('.qs-sld');
+  if(qsSld){
+    qsSld.addEventListener('pointerdown',e=>{
+      e.preventDefault();e.stopPropagation();
+      const move=ev=>{const r=qsSld.getBoundingClientRect();let p=(ev.clientX-r.left)/r.width;p=Math.max(0,Math.min(1,p));
+        qsSld.querySelector('.qs-sld-f').style.width=(p*100)+'%';qsSld.querySelector('.qs-sld-t').style.left=(p*100)+'%';};
+      move(e);
+      const up=()=>{window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);};
+      window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);
+    });
+  }
+
+  let NOTIF=[];
+  function renderNotif(){const list=$('#notifList');if(NOTIF.length===0){list.innerHTML='<div class="notif-empty">没有通知</div>';return;}
+    list.innerHTML=NOTIF.map((n,i)=>{const ic=n.img?`<img src="${n.img}" alt="">`:`<svg viewBox="0 0 24 24"><use href="#i-${n.ic}"/></svg>`;
+      return `<div class="notif-item" data-i="${i}"><div class="notif-ic">${ic}</div><div class="notif-main"><div class="notif-title">${n.t}</div><div class="notif-text">${n.x}</div><div class="notif-time">${n.time}</div></div></div>`;}).join('');
+    list.querySelectorAll('.notif-item').forEach(el=>el.addEventListener('click',()=>{const n=NOTIF[+el.dataset.i];closeNotif();n.go&&n.go();}));}
+  function renderSbNotif(){let h='';
+    NOTIF.slice(0,3).forEach(n=>{h+=n.img?`<span class="sbni"><img src="${n.img}" alt=""></span>`:`<span class="sbni"><svg viewBox="0 0 24 24"><use href="#i-${n.ic}"/></svg></span>`;});
+    $('#sbLeft').innerHTML=h;}
+  renderNotif();renderSbNotif();
+
+  /* ===== dialer ===== */
+  $('#dialBack').addEventListener('click',()=>show('home'));
+  let dnum='';const dialNum=$('#dialNum');
+  function setNum(){dialNum.textContent=dnum;}
+  $('#keypad').querySelectorAll('.key').forEach(k=>k.addEventListener('click',()=>{dnum+=k.dataset.d;setNum();}));
+  $('#dialDel').addEventListener('click',()=>{dnum=dnum.slice(0,-1);setNum();});
+  $('#dialCall').addEventListener('click',()=>{if(!dnum){t('请输入号码');return;}t('正在呼叫 '+dnum);dnum='';setNum();});
+
+  /* ===== messaging (conversation list) ===== */
+  const MSG=[
+    {n:'王经理',c:'var(--blue)',s:'方案已收到，下午电话聊',tm:'9:15',g:()=>t('打开与王经理的会话')},
+    {n:'妈妈',c:'var(--green)',s:'记得按时吃饭',tm:'9:42',g:()=>t('打开与妈妈的会话')},
+    {n:'运营商',c:'var(--orange)',s:'您本月流量已用 328MB',tm:'昨天',g:()=>t('打开与运营商的会话')},
+    {n:'李工',c:'var(--purple)',s:'代码我 review 完了',tm:'周一',g:()=>t('打开与李工的会话')},
+  ];
+  $('#msgList').innerHTML=MSG.map((m,i)=>`<div class="msg-item" data-i="${i}"><div class="msg-av" style="background:${m.c}">${m.n[0]}</div><div class="msg-body"><div class="msg-top"><div class="msg-name">${m.n}</div><div class="msg-time">${m.tm}</div></div><div class="msg-snip">${m.s}</div></div></div>`).join('');
+  $('#msgList').querySelectorAll('.msg-item').forEach(el=>el.addEventListener('click',()=>{const m=MSG[+el.dataset.i];m.g();}));
+  $('#msgBack').addEventListener('click',()=>show('home'));
+
+  /* device fills entire viewport — no scaling needed */
+  function fitPhone(){}
+  fitPhone();window.addEventListener('resize',fitPhone);
+
+  /* ===== Camera (getUserMedia) + Gallery (persisted) ===== */
+  let GALLERY=JSON.parse(localStorage.getItem('aosp_gallery')||'[]');
+  let camStream=null;
+  function startCam(){const v=$('#camVideo');if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){t('当前环境不支持摄像头');return;}
+    navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false}).then(s=>{camStream=s;v.srcObject=s;}).catch(()=>{t('无法访问摄像头（需在 https/localhost 下授权）');});}
+  function stopCam(){if(camStream){camStream.getTracks().forEach(tr=>tr.stop());camStream=null;}}
+  function capturePhoto(){const v=$('#camVideo');if(!v.videoWidth){t('摄像头未就绪');return;}
+    const c=document.createElement('canvas');c.width=v.videoWidth;c.height=v.videoHeight;
+    c.getContext('2d').drawImage(v,0,0,c.width,c.height);
+    const url=c.toDataURL('image/jpeg',0.85);GALLERY.unshift(url);if(GALLERY.length>30)GALLERY=GALLERY.slice(0,30);
+    localStorage.setItem('aosp_gallery',JSON.stringify(GALLERY));renderGallery();updateCamThumb();t('已保存照片');}
+  function renderGallery(){$('#galGrid').innerHTML=GALLERY.length?GALLERY.map((u,i)=>`<div class='gal-cell' data-i='${i}'><img src='${u}' alt=''></div>`).join(''):'<div class="gal-empty">还没有照片，去相机拍一张吧</div>';}
+  function updateCamThumb(){$('#camThumb').style.backgroundImage=GALLERY.length?`url(${GALLERY[0]})`:'none';}
+  $('#camShutter').addEventListener('click',capturePhoto);
+  $('#camGallery').addEventListener('click',()=>show('gallery'));
+  $('#camThumb').addEventListener('click',()=>show('gallery'));
+  $('#camBack').addEventListener('click',()=>show('home'));
+  $('#galBack').addEventListener('click',()=>show('home'));
+  $('#galGrid').addEventListener('click',e=>{const c=e.target.closest('.gal-cell');if(!c)return;const u=GALLERY[+c.dataset.i];$('#galViewImg').src=u;$('#galView').style.display='flex';});
+  $('#galView').addEventListener('click',()=>{$('#galView').style.display='none';});
+
+  /* ===== Recents / multitasking (ICS 4.0.4: tap to open, long-press => Remove/App info) ===== */
+  function renderRecents(){
+    const list=$('#recList');
+    if(RECENTS.length===0){list.innerHTML='<div class="rec-empty">没有最近使用的应用程序</div>';return;}
+    list.innerHTML=RECENTS.map((id,i)=>{const m=APP_META[id];
+      const ic=m.img?`<img src='${m.img}' alt=''>`:`<svg viewBox='0 0 24 24'><use href='#${m.svg}'/></svg>`;
+      const ph=m.img?`<img src='${m.img}' alt=''>`:`<svg viewBox='0 0 24 24'><use href='#${m.svg}'/></svg>`;
+      return `<div class='rec-item' data-i='${i}'>
+        <div class='ri-thumb'><div class='ph' style='background:${m.c}'>${ph}</div></div>
+        <div class='ri-callout'></div>
+        <div class='ri-icon'>${ic}</div>
+        <div class='ri-label'>${m.n}</div>
+        <div class='ri-desc'>${m.d||m.n}</div>
+      </div>`;}).join('');
+    list.querySelectorAll('.rec-item').forEach(card=>{
+      const i=+card.dataset.i;let lp=null,lpFired=false;
+      card.addEventListener('click',()=>{if(lpFired){lpFired=false;return;}const id=RECENTS[i];if(id){pendingFrom=card;show(id);}});
+      card.addEventListener('contextmenu',e=>{e.preventDefault();openRecMenu(card,i);});
+      card.addEventListener('pointerdown',()=>{lpFired=false;lp=setTimeout(()=>{lpFired=true;openRecMenu(card,i);},500);});
+      const clr=()=>{if(lp){clearTimeout(lp);lp=null;}};
+      card.addEventListener('pointerup',clr);card.addEventListener('pointercancel',clr);
+      card.addEventListener('pointermove',e=>{if(lp&&Math.abs(e.clientX-card.getBoundingClientRect().left)>24)clr();});
+    });
+  }
+  function openRecMenu(card,i){
+    closeRecMenu();
+    const id=RECENTS[i];if(!id)return;const m=APP_META[id];
+    const r=card.getBoundingClientRect();
+    const menu=document.createElement('div');menu.className='rec-menu';menu.id='recMenu';
+    menu.style.left=Math.min(r.left,r.right-170)+'px';menu.style.top=(r.bottom+4)+'px';
+    menu.innerHTML='<div data-a="remove">移除</div><div data-a="info">应用信息</div>';
+    menu.querySelector('[data-a=remove]').addEventListener('click',()=>{RECENTS.splice(i,1);closeRecMenu();renderRecents();});
+    menu.querySelector('[data-a=info]').addEventListener('click',()=>{closeRecMenu();t(m.n+' · 应用信息');});
+    document.body.appendChild(menu);
+    setTimeout(()=>document.addEventListener('click',closeRecMenuOnce),0);
+  }
+  function closeRecMenu(){const m=$('#recMenu');if(m)m.remove();}
+  function closeRecMenuOnce(e){if(!e.target.closest('.rec-menu')){closeRecMenu();document.removeEventListener('click',closeRecMenuOnce);}}
+
+  /* ===== App back buttons ===== */
+  ['browser','calendar','calculator','email','downloads','recorder'].forEach(id=>{
+    const b=document.getElementById(id+'Back'); if(b) b.addEventListener('click',()=>show('home'));
+  });
+  $('#clockBack').addEventListener('click',()=>{clearClk();show('home');});
+  $('#musicBack').addEventListener('click',()=>{clearInterval(mTimer);mPlay=false;show('home');});
+  $('#contactsBack').addEventListener('click',()=>{
+    if($('#contactDetail').classList.contains('on')){$('#contactDetail').classList.remove('on');$('#contactsTitle').textContent='联系人';}
+    else show('home');
+  });
+
+  /* ===== Browser ===== */
+  const BOOKMARKS=[
+    {n:'Google',c:'#4285f4',u:'https://www.google.com',t:'Google',p:'全球最大的搜索引擎，提供网页、图片、视频搜索，以及邮箱、地图、云盘等一系列服务。'},
+    {n:'YouTube',c:'#ff0000',u:'https://www.youtube.com',t:'YouTube',p:'全球最大的视频分享平台，用户可以上传、观看、评论与分享视频内容。'},
+    {n:'维基百科',c:'#202020',u:'https://zh.wikipedia.org',t:'维基百科',p:'自由的在线百科全书，由全球志愿者协作编写的多语言网络百科全书。'},
+    {n:'Android',c:'#3ddc84',u:'https://www.android.com',t:'Android',p:'Google 推出的开放移动操作系统，基于 Linux 内核，是全球使用最广泛的手机系统。'},
+    {n:'Gmail',c:'#ea4335',u:'https://mail.google.com',t:'Gmail',p:'Google 提供的免费电子邮件服务，以强大的搜索与智能分类功能著称。'},
+    {n:'天气',c:'#33b5e5',u:'about:weather',t:'天气',p:'今日天气：晴，气温 24°C，东北风 2 级，空气质量良，适宜户外活动。'},
+  ];
+  function renderBrowserHome(){
+    $('#brUrl').textContent='书签';
+    $('#brBody').innerHTML=`<div class="br-start"><h3>书签</h3><div class="br-bm">${BOOKMARKS.map((b,i)=>`<a data-i="${i}"><div class="bm-ic" style="background:${b.c}">${b.n[0]}</div><span>${b.n}</span></a>`).join('')}</div></div>`;
+    $('#brBody').querySelectorAll('.br-bm a').forEach(a=>a.addEventListener('click',()=>{
+      const b=BOOKMARKS[+a.dataset.i];
+      $('#brUrl').textContent=b.u;
+      $('#brBody').innerHTML=`<div class="br-page"><h1>${b.t}</h1><p>${b.p}</p><p><span class="tag">示例页面</span><span class="tag">本地渲染</span></p><p style="color:#999;font-size:12px">（演示用本地渲染页面，并非真实联网内容）</p><div class="br-bm" style="margin-top:18px"><a id="brBackHome" style="cursor:pointer"><div class="bm-ic" style="background:#33b5e5">←</div><span>返回书签</span></a></div></div>`;
+      $('#brBackHome').addEventListener('click',renderBrowserHome);
+    }));
+  }
+  renderBrowserHome();
+  $('#brTabs').addEventListener('click',()=>t('新标签页'));
+  $('#brMenu').addEventListener('click',()=>t('菜单'));
+
+  /* ===== Calendar ===== */
+  let calDate=new Date(2026,7,9);
+  const calEvents={9:'会议',15:'生日',22:'账单'};
+  function renderCalendar(){
+    const y=calDate.getFullYear(),m=calDate.getMonth();
+    $('#calTitle').textContent=`${y}年${m+1}月`;
+    const first=new Date(y,m,1).getDay();
+    const days=new Date(y,m+1,0).getDate();
+    const prevDays=new Date(y,m,0).getDate();
+    const today=new Date(2026,7,9);
+    let html='';
+    for(let i=0;i<first;i++)html+=`<div class="cal-cell dim">${prevDays-first+i+1}</div>`;
+    for(let d=1;d<=days;d++){
+      const isT=d===today.getDate()&&m===today.getMonth()&&y===today.getFullYear();
+      const ev=calEvents[d]?`<span class="dot"></span>`:'';
+      html+=`<div class="cal-cell ${isT?'today':''}" data-d="${d}">${d}${ev}</div>`;
+    }
+    const rem=(7-((first+days)%7))%7;
+    for(let i=1;i<=rem;i++)html+=`<div class="cal-cell dim">${i}</div>`;
+    $('#calGrid').innerHTML=html;
+    $('#calGrid').querySelectorAll('.cal-cell[data-d]').forEach(c=>c.addEventListener('click',()=>{
+      const d=+c.dataset.d;t(`${y}年${m+1}月${d}日${calEvents[d]?' · '+calEvents[d]:''}`);
+    }));
+  }
+  renderCalendar();
+  $('#calPrev').addEventListener('click',()=>{calDate.setMonth(calDate.getMonth()-1);renderCalendar();});
+  $('#calNext').addEventListener('click',()=>{calDate.setMonth(calDate.getMonth()+1);renderCalendar();});
+
+  /* ===== Clock / DeskClock ===== */
+  let clkTimer=null;
+  function clearClk(){if(clkTimer){clearInterval(clkTimer);clkTimer=null;}}
+  const ALARMS=[{t:'07:00',l:'工作日闹钟',on:true},{t:'08:30',l:'起床',on:false},{t:'21:00',l:'睡前',on:true}];
+  const WORLDC=[{n:'北京',o:8},{n:'东京',o:9},{n:'伦敦',o:0},{n:'纽约',o:-5},{n:'巴黎',o:1},{n:'悉尼',o:11}];
+  const fmt2=n=>String(n).padStart(2,'0');
+  function worldTime(o){const now=new Date();const utc=now.getTime()+now.getTimezoneOffset()*60000;return fmt2(new Date(utc+o*3600000).getHours())+':'+fmt2(new Date(utc+o*3600000).getMinutes());}
+  function renderClock(tab){
+    clearClk();
+    if(tab==='alarm'){
+      $('#clkBody').innerHTML=ALARMS.map((a,i)=>`<div class="clk-row"><div class="nm">${a.t}<div style="font-size:12px;color:#888">${a.l}</div></div><div class="switch ${a.on?'on':''}" data-al="${i}"><i></i></div></div>`).join('')+`<div class="clk-empty">点击右上角 + 添加闹钟</div>`;
+      $('#clkBody').querySelectorAll('.switch').forEach(s=>s.addEventListener('click',()=>{const i=+s.dataset.al;ALARMS[i].on=!ALARMS[i].on;s.classList.toggle('on');}));
+    } else if(tab==='world'){
+      $('#clkBody').innerHTML=WORLDC.map(w=>`<div class="clk-row"><div class="nm">${w.n}</div><div class="tm">${worldTime(w.o)}</div></div>`).join('');
+      clkTimer=setInterval(()=>{$('#clkBody').querySelectorAll('.clk-row .tm').forEach((e,idx)=>{e.textContent=worldTime(WORLDC[idx].o);});},1000);
+    } else if(tab==='timer'){
+      $('#clkBody').innerHTML=`<div class="clk-center"><div class="big-time" id="tmDisp">05:00</div><div class="timer-set">分钟 <input id="tmMin" value="5" maxlength="3"></div><button class="clk-btn" id="tmStart">开始</button><button class="clk-btn sec" id="tmReset">重置</button></div>`;
+      let left=300,running=false;
+      const disp=()=>{$('#tmDisp').textContent=fmt2(Math.floor(left/60))+':'+fmt2(left%60);};
+      $('#tmStart').addEventListener('click',()=>{
+        if(running){clearClk();running=false;$('#tmStart').textContent='开始';return;}
+        if(left<=0)left=(+ $('#tmMin').value||5)*60;
+        running=true;$('#tmStart').textContent='暂停';
+        clkTimer=setInterval(()=>{left--;disp();if(left<=0){clearClk();running=false;$('#tmStart').textContent='开始';t('计时结束');}},1000);
+      });
+      $('#tmReset').addEventListener('click',()=>{clearClk();running=false;left=(+ $('#tmMin').value||5)*60;disp();$('#tmStart').textContent='开始';});
+      $('#tmMin').addEventListener('change',()=>{if(!running){left=(+ $('#tmMin').value||5)*60;disp();}});
+    } else if(tab==='stop'){
+      $('#clkBody').innerHTML=`<div class="clk-center"><div class="big-time" id="swDisp">00:00.00</div></div><button class="clk-btn" id="swBtn">开始</button><button class="clk-btn sec" id="swLap">计次</button><div id="swLaps"></div>`;
+      let ms=0,run=false;
+      const f=()=>{const m=Math.floor(ms/60000),s=Math.floor(ms/1000)%60,cs=Math.floor(ms/10)%100;$('#swDisp').textContent=fmt2(m)+':'+fmt2(s)+'.'+fmt2(cs);};
+      $('#swBtn').addEventListener('click',()=>{
+        if(run){clearClk();run=false;$('#swBtn').textContent='继续';}
+        else{run=true;$('#swBtn').textContent='停止';clkTimer=setInterval(()=>{ms+=10;f();},10);}
+      });
+      $('#swLap').addEventListener('click',()=>{
+        if(!run&&ms===0)return;
+        const laps=$('#swLaps');const n=laps.children.length+1;
+        const div=document.createElement('div');div.className='lap';div.innerHTML=`<span>计次 ${n}</span><span>${$('#swDisp').textContent}</span>`;laps.prepend(div);
+      });
+    }
+  }
+  $('#clkTabs').addEventListener('click',e=>{const tab=e.target.closest('.clk-tab');if(!tab)return;$('#clkTabs').querySelectorAll('.clk-tab').forEach(x=>x.classList.remove('on'));tab.classList.add('on');renderClock(tab.dataset.t);});
+  renderClock('alarm');
+  $('#clkAdd').addEventListener('click',()=>t('添加闹钟'));
+
+  /* ===== Calculator ===== */
+  let cCur='0',cPrev=null,cOp=null,cEval=false;
+  function cShow(){const s=cCur.length>12?cCur.slice(0,12):cCur;$('#calcDisp').textContent=s;}
+  function cCompute(a,op,b){a=parseFloat(a);b=parseFloat(b);let r=0;if(op==='+')r=a+b;else if(op==='−')r=a-b;else if(op==='×')r=a*b;else if(op==='÷')r=b===0?NaN:a/b;return r;}
+  function calcKey(k){
+    if(k==='C'){cCur='0';cPrev=null;cOp=null;cEval=false;}
+    else if(k==='+/-'){cCur=String(parseFloat(cCur)*-1);}
+    else if(k==='%'){cCur=String(parseFloat(cCur)/100);}
+    else if(k==='.'){if(!cCur.includes('.'))cCur+='.';}
+    else if(k==='+'||k==='−'||k==='×'||k==='÷'){
+      if(cOp!==null&&!cEval){const r=cCompute(cPrev,cOp,cCur);cPrev=String(r);cCur=String(r);}else cPrev=cCur;
+      cOp=k;cEval=true;
+    }
+    else if(k==='='){if(cOp!==null){const r=cCompute(cPrev,cOp,cCur);cCur=isFinite(r)?String(r):'错误';cPrev=null;cOp=null;cEval=true;}}
+    else{if(cEval){cCur='0';cEval=false;}if(cCur==='0')cCur=k;else cCur+=k;}
+    cShow();
+  }
+  $('#calcKeys').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;calcKey(b.dataset.k);});
+  cShow();
+
+  /* ===== Email ===== */
+  const MAILS=[
+    {f:'Google',s:'安全提醒：新设备登录',p:'我们检测到您的账号在一台新设备上登录，如非本人操作请修改密码。',t:'09:24',b:'尊敬的用户：\n\n我们检测到您的 Google 账号于今天在一台新设备上登录，登录地点为中国上海。如果这是您本人的操作请忽略此邮件；否则请尽快修改密码并开启两步验证。\n\nGoogle 安全团队'},
+    {f:'Android 团队',s:'Android 4.0 已可用',p:'了解 Ice Cream Sandwich 带来的全新设计与功能。',t:'昨天',b:'您好：\n\nAndroid 4.0 Ice Cream Sandwich 现已发布。它带来了统一的手机与平板体验、全新的 Holo 设计语言、改进的多任务以及更流畅的动画。\n\n感谢您使用 Android。'},
+    {f:'李雷',s:'周末聚餐',p:'这周六晚上一起吃饭？老地方见。',t:'周一',b:'Hi：\n\n这周六晚上有空吗？我们几个老同学想聚一下，还是去上次那家川菜馆，大概六点半，你来定。\n\n李雷'},
+    {f:'系统',s:'存储空间不足',p:'您的设备剩余空间少于 500 MB。',t:'上周',b:'系统通知：\n\n设备内部存储即将用尽，建议删除不常用的应用或清理下载文件以释放空间。'},
+  ];
+  function renderEmail(){
+    $('#email').querySelectorAll('.email-detail').forEach(d=>d.remove());
+    $('#emailTitle').textContent='收件箱';
+    $('#emailList').style.display='block';
+    $('#emailList').innerHTML=MAILS.map((m,i)=>`<div class="email-item" data-i="${i}"><span class="e-time">${m.t}</span><div class="e-from">${m.f}</div><div class="e-sub">${m.s}</div><div class="e-prev">${m.p}</div></div>`).join('');
+    $('#emailList').querySelectorAll('.email-item').forEach(it=>it.addEventListener('click',()=>{
+      const m=MAILS[+it.dataset.i];
+      $('#emailTitle').textContent=m.f;
+      $('#emailList').style.display='none';
+      const d=document.createElement('div');d.className='email-detail';d.style.flex='1';d.style.overflowY='auto';
+      d.innerHTML=`<div class="ed-from">${m.f}</div><div class="ed-sub">${m.s} · ${m.t}</div><div class="ed-body">${m.b.replace(/\n/g,'<br>')}</div><div style="margin-top:16px"><span class="br-bm" style="display:inline-block"><a id="emBack" style="cursor:pointer"><div class="bm-ic" style="background:#33b5e5">←</div><span>返回</span></a></span></div></div>`;
+      $('#email').appendChild(d);
+      $('#emBack').addEventListener('click',()=>{d.remove();$('#emailList').style.display='block';$('#emailTitle').textContent='收件箱';});
+    }));
+  }
+  renderEmail();
+  $('#emailCompose').addEventListener('click',()=>t('写邮件'));
+
+  /* ===== Music ===== */
+  const TRACKS=[
+    {t:'夜曲',a:'周杰伦',c:'#aa66cc',d:214},
+    {t:'海阔天空',a:'Beyond',c:'#33b5e5',d:326},
+    {t:'童年',a:'罗大佑',c:'#99cc00',d:253},
+    {t:'光辉岁月',a:'Beyond',c:'#ffbb33',d:298},
+    {t:'稻香',a:'周杰伦',c:'#ff4444',d:223},
+    {t:'后来',a:'刘若英',c:'#0099cc',d:268},
+  ];
+  let mIdx=0,mPlay=false,mPos=0,mTimer=null;
+  function renderMusic(){
+    $('#musicList').innerHTML=TRACKS.map((tr,i)=>`<div class="music-item ${i===mIdx&&mPlay?'playing':''}" data-i="${i}"><div class="m-art" style="background:${tr.c}">♪</div><div class="m-info"><div class="m-title">${tr.t}</div><div class="m-artist">${tr.a}</div></div></div>`).join('');
+    $('#musicList').querySelectorAll('.music-item').forEach(it=>it.addEventListener('click',()=>{mIdx=+it.dataset.i;mPos=0;playMusic(true);}));
+  }
+  function updateNow(){
+    const tr=TRACKS[mIdx];
+    $('#npTitle').textContent=tr.t;$('#npArtist').textContent=tr.a;
+    $('#npArt').style.background=tr.c;$('#npArt').textContent='♪';
+    $('#npProgF').style.width=(mPos/tr.d*100)+'%';
+    $('#npPlay').innerHTML=`<svg viewBox="0 0 24 24"><use href="#${mPlay?'i-pause':'i-play'}"/></svg>`;
+  }
+  function playMusic(on){
+    mPlay=on;clearInterval(mTimer);
+    if(on){mTimer=setInterval(()=>{mPos+=0.25;if(mPos>=TRACKS[mIdx].d){mIdx=(mIdx+1)%TRACKS.length;mPos=0;}updateNow();renderMusic();},250);}
+    updateNow();renderMusic();
+  }
+  $('#npPlay').addEventListener('click',()=>playMusic(!mPlay));
+  $('#npNext').addEventListener('click',()=>{mIdx=(mIdx+1)%TRACKS.length;mPos=0;if(mPlay)playMusic(true);else updateNow();renderMusic();});
+  $('#npPrev').addEventListener('click',()=>{mIdx=(mIdx-1+TRACKS.length)%TRACKS.length;mPos=0;if(mPlay)playMusic(true);else updateNow();renderMusic();});
+  renderMusic();updateNow();
+
+  /* ===== Contacts ===== */
+  const CONTACTS=[
+    {n:'陈伟',p:'138-0011-2233',e:'chenwei@example.com',c:'#33b5e5'},
+    {n:'林芳',p:'139-2244-5566',e:'linfang@example.com',c:'#99cc00'},
+    {n:'王强',p:'137-7788-9900',e:'wangqiang@example.com',c:'#aa66cc'},
+    {n:'李娜',p:'135-3322-1144',e:'lina@example.com',c:'#ff4444'},
+    {n:'张敏',p:'136-5566-7788',e:'zhangmin@example.com',c:'#ffbb33'},
+    {n:'刘洋',p:'134-8899-0011',e:'liuyang@example.com',c:'#0099cc'},
+  ];
+  function renderContacts(){
+    $('#contactsList').innerHTML=CONTACTS.map((c,i)=>`<div class="contact-item" data-i="${i}"><div class="c-av" style="background:${c.c}">${c.n[0]}</div><div class="c-name">${c.n}</div></div>`).join('');
+    $('#contactsList').querySelectorAll('.contact-item').forEach(it=>it.addEventListener('click',()=>{
+      const c=CONTACTS[+it.dataset.i];
+      $('#contactDetail').innerHTML=`<div class="cd-head"><div class="cd-av" style="background:${c.c}">${c.n[0]}</div><div class="cd-name">${c.n}</div></div><div class="cd-row"><div class="cd-l">手机号码</div>${c.p}</div><div class="cd-row"><div class="cd-l">电子邮件</div>${c.e}</div><div class="cd-row"><div class="cd-l">地址</div>北京市朝阳区</div>`;
+      $('#contactDetail').classList.add('on');$('#contactsTitle').textContent=c.n;
+    }));
+  }
+  renderContacts();
+  $('#contactsAdd').addEventListener('click',()=>t('新建联系人'));
+
+  /* ===== Downloads ===== */
+  const DLS=[
+    {n:'android_4.0_user_guide.pdf',s:'2.4 MB',m:'今天 14:02',c:'#ff4444',t:'PDF'},
+    {n:'holo_wallpaper.png',s:'1.1 MB',m:'今天 11:20',c:'#33b5e5',t:'IMG'},
+    {n:'music_pack.zip',s:'18.6 MB',m:'昨天 21:45',c:'#99cc00',t:'ZIP'},
+    {n:'setup_ics.apk',s:'9.3 MB',m:'周一',c:'#aa66cc',t:'APK'},
+    {n:'demo_video.mp4',s:'42.0 MB',m:'上周',c:'#ffbb33',t:'MP4'},
+  ];
+  function renderDownloads(){$('#dlList').innerHTML=DLS.map(d=>`<div class="dl-item"><div class="dl-ic" style="background:${d.c}">${d.t}</div><div class="dl-info"><div class="dl-name">${d.n}</div><div class="dl-meta">${d.s} · ${d.m}</div></div></div>`).join('');}
+  renderDownloads();
+
+  /* ===== Sound Recorder ===== */
+  let recOn=false,recSec=0,recTimer=null,recStream=null,recMR=null,recChunks=[],CLIPS=[];
+  const recFmt=s=>fmt2(Math.floor(s/60))+':'+fmt2(s%60);
+  function renderRecList(){$('#recList2').innerHTML=CLIPS.length?CLIPS.map(c=>`<div class="rec-clip"><div class="rc-ic"><svg viewBox="0 0 24 24" style="width:20px;height:20px;fill:#fff"><use href="#i-play"/></svg></div><div class="rc-info"><div class="rc-name">${c.n}</div><div class="rc-meta">${recFmt(c.d)} · ${c.t}</div></div></div>`).join(''):'<div class="clk-empty">暂无录音</div>';}
+  $('#recBtn').addEventListener('click',async()=>{
+    if(!recOn){
+      recOn=true;recSec=0;$('#recBtn').classList.add('recording');$('#recHint').textContent='录音中…点击停止';
+      recTimer=setInterval(()=>{recSec++;$('#recTime').textContent=recFmt(recSec);},1000);
+      if(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia){
+        try{recStream=await navigator.mediaDevices.getUserMedia({audio:true});recMR=new MediaRecorder(recStream);recChunks=[];
+          recMR.ondataavailable=e=>recChunks.push(e.data);recMR.start();}catch(e){recStream=null;recMR=null;}
+      }
+    } else {
+      recOn=false;clearInterval(recTimer);$('#recBtn').classList.remove('recording');$('#recHint').textContent='点击开始录音';$('#recTime').textContent='00:00';
+      if(recMR&&recMR.state!=='inactive'){recMR.stop();recMR.onstop=()=>{finishRec();};}else finishRec();
+      if(recStream)recStream.getTracks().forEach(tr=>tr.stop());
+    }
+  });
+  function finishRec(){$('#recHint').textContent='点击开始录音';CLIPS.unshift({n:'录音 '+(CLIPS.length+1),d:recSec,t:'刚刚'});renderRecList();t('已保存录音');}
+  renderRecList();
+</script>
+</body>
+</html>
