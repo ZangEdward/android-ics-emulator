@@ -69,19 +69,19 @@
   .lock-date{font-size:13px;color:rgba(255,255,255,.88);margin-top:8px;text-align:center;text-shadow:0 1px 4px rgba(0,0,0,.45);}
   .lock-space{flex:1;}
   .lock-ringzone{position:relative;height:280px;flex-shrink:0;margin-bottom:30px;}
-  /* AOSP ICS LockScreen MultiWaveView: outer ring 270dp ellipse + 2 inner wave ellipses + handle (center) + targets (lr).
-     ic_lockscreen_outerring.xml = shape oval 270dp stroke #1affffff 2dp. */
+  /* AOSP ICS LockScreen MultiWaveView (real): ONE wave ring = ic_lockscreen_outerring shape oval 270dp.
+     Idle: circle centered on handle. While dragging: the ring FOLLOWS the handle and stretches
+     horizontally (scaleX) into an ellipse — exactly like MultiWaveView.onDraw + mOuterRing scale. */
   .mwv{position:absolute;left:0;right:0;top:0;bottom:30px;}
-  .mwv-wave{position:absolute;left:50%;top:50%;border:2px solid rgba(255,255,255,.10);border-radius:50%;
-    pointer-events:none;transform:translate(-50%,-50%);}
-  .mwv-wave.outer{width:270px;height:145px;border-color:rgba(26,255,255,.20);}
-  .mwv-wave.inner{width:200px;height:105px;border-color:rgba(26,255,255,.16);}
-  .mwv-wave.inner2{width:130px;height:70px;border-color:rgba(26,255,255,.14);}
-  /* drag guide ellipse: stretches from handle toward target while dragging */
-  .mwv-guide{position:absolute;left:50%;top:50%;width:210px;height:54px;margin:-27px 0 0 -105px;
-    border:2px solid rgba(255,255,255,.22);border-radius:50%;opacity:0;pointer-events:none;
-    transform-origin:50% 50%;transform:scaleX(0);transition:opacity .15s;}
-  /* handle: real AOSP ic_lockscreen_handle_normal.png (162x162, white circle + lock icon, 27dp radius = 54dp) */
+  .mwv-wave{position:absolute;left:50%;top:50%;width:270px;height:270px;margin:-135px 0 0 -135px;
+    border-radius:50%;border:2px solid rgba(26,255,255,.30);pointer-events:none;z-index:1;
+    transition:transform .2s cubic-bezier(.2,.7,.3,1);will-change:transform;}
+  .mwv-wave.drag{transition:none;}
+  /* drag-guide line from handle toward target (extra affordance while dragging) */
+  .mwv-guide{position:absolute;left:50%;top:50%;width:200px;height:50px;margin:-25px 0 0 -100px;
+    border:2px solid rgba(255,255,255,.25);border-radius:50%;opacity:0;pointer-events:none;
+    transform-origin:50% 50%;transform:scaleX(0);transition:opacity .15s;z-index:1;}
+  /* handle: real AOSP ic_lockscreen_handle_normal.png (162x162: transparent circle, white border, lock icon) */
   .mwv-handle{position:absolute;left:50%;top:50%;width:80px;height:80px;margin:-40px 0 0 -40px;
     display:flex;align-items:center;justify-content:center;cursor:grab;touch-action:none;z-index:3;
     transition:transform .22s cubic-bezier(.2,.7,.3,1);will-change:transform;}
@@ -579,9 +579,7 @@
       <div class="lock-space"></div>
       <div class="lock-ringzone">
         <div class="mwv" id="mwv">
-          <div class="mwv-wave outer"></div>
-          <div class="mwv-wave inner"></div>
-          <div class="mwv-wave inner2"></div>
+          <div class="mwv-wave" id="mwvWave"></div>
           <div class="mwv-guide" id="mwvGuide"></div>
           <div class="mwv-target l" id="mwvCam"><img src="assets/ic_lockscreen_camera_normal.png" alt=""></div>
           <div class="mwv-target r" id="mwvUnlock"><img src="assets/ic_lockscreen_unlock_normal.png" alt=""></div>
@@ -1402,8 +1400,8 @@
     const nd=$('#notifDate'); if(nd)nd.textContent=date;}
   tick();setInterval(tick,10000);
 
-  /* ---- lock MultiWaveView drag (ICS 4.0: 270dp outer + 2 inner wave ellipses + handle in center, right=unlock, LEFT=camera) ---- */
-  const mwv=$('#mwv'),mHandle=$('#mwvHandle'),mUnlock=$('#mwvUnlock'),mCam=$('#mwvCam'),mGuide=$('#mwvGuide');
+  /* ---- lock MultiWaveView drag (real AOSP 4.0: ONE 270dp wave ring follows handle & stretches into ellipse; right=unlock, LEFT=camera) ---- */
+  const mwv=$('#mwv'),mHandle=$('#mwvHandle'),mUnlock=$('#mwvUnlock'),mCam=$('#mwvCam'),mGuide=$('#mwvGuide'),mWave=$('#mwvWave');
   let drag=false,sx=0,dx=0;const pt=e=>e.touches?e.touches[0]:e;
   const SNAP=45,MAX=105;
   function setHandleImg(pressed){mHandle.querySelector('img').src=pressed?'assets/ic_lockscreen_handle_pressed.png':'assets/ic_lockscreen_handle_normal.png';}
@@ -1415,19 +1413,22 @@
   function applyDrag(){
     const d=Math.max(-MAX,Math.min(MAX,dx));
     mHandle.style.transform=`translate(${d}px,0)`;
-    /* drag guide ellipse: starts at scaleX(0) invisible, stretches as handle moves toward target */
-    const k=Math.abs(d)/MAX; // 0..1
+    /* real AOSP: wave ring follows handle and scales horizontally into an ellipse */
+    const k=1+Math.abs(d)/MAX*0.55;
+    mWave.style.transform=`translate(${d}px,0) scale(${k},1)`;
+    /* drag-guide affordance line */
     mGuide.style.opacity=drag?0.85:0;
     mGuide.style.transformOrigin=d>=0?'left center':'right center';
-    mGuide.style.transform=`scaleX(${0.25+k*1.1})`;
-    setTargetImgs(d>SNAP/2,dx<-SNAP/2); // sic: dx (intentional)
+    mGuide.style.transform=`scaleX(${0.25+Math.abs(d)/MAX*1.1})`;
+    setTargetImgs(d>SNAP/2,dx<-SNAP/2);
   }
-  function startDrag(e){drag=true;sx=pt(e).clientX;setHandleImg(true);mHandle.classList.add('dragging');mGuide.style.transition='none';mHandle.style.transition='none';applyDrag();}
+  function startDrag(e){drag=true;sx=pt(e).clientX;setHandleImg(true);mHandle.classList.add('dragging');mWave.classList.add('drag');mGuide.style.transition='none';mHandle.style.transition='none';mWave.style.transition='none';applyDrag();}
   function mv(e){if(!drag)return;dx=pt(e).clientX-sx;applyDrag();if(e.cancelable)e.preventDefault();}
   function endDrag(){if(!drag)return;drag=false;setHandleImg(false);setTargetImgs(false,false);
   const d=dx;dx=0;
-  mHandle.classList.remove('dragging');
+  mHandle.classList.remove('dragging');mWave.classList.remove('drag');
   mHandle.style.transition='';mHandle.style.transform='';
+  mWave.style.transition='';mWave.style.transform='';
   mGuide.style.transition='';mGuide.style.opacity=0;mGuide.style.transform='scaleX(0)';
   if(d>SNAP)fly(180,()=>show('home'));
   else if(d<-SNAP)fly(-180,()=>show('camera'));
