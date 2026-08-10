@@ -308,11 +308,11 @@
   .dial-del svg{width:26px;height:26px;fill:#fff;}
   .dial-del img{width:26px;height:26px;}
   .dial-del:active{opacity:.4;}
-  .keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:14px 12px;padding:6px 26px 0;}
-  .key{height:62px;border:none;background:transparent;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;color:#fff;transition:background .12s;font-family:inherit;}
-  .key .n{font-size:30px;font-weight:300;line-height:1;}
-  .key .l{font-size:10px;color:#8c959d;margin-top:3px;letter-spacing:1px;}
-  .key:active{background:rgba(51,181,229,.20);}
+  .keypad{display:grid;grid-template-columns:repeat(3,1fr);justify-items:center;gap:2px 0;padding:2px 8px 8px;
+    background:rgba(0,0,0,.25);border-radius:8px;margin:0 8px;}
+  /* real AOSP dial keys: dial_num_*_wht.png 135x94 (hdpi), one per cell, centered */
+  .key{width:135px;height:auto;cursor:pointer;opacity:.95;}
+  .key:active{opacity:1;filter:brightness(1.25);}
   .dial-call{width:62px;height:62px;border-radius:50%;background:var(--green);margin:18px auto 0;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.5);}
   .dial-call svg{width:30px;height:30px;fill:#fff;}
   .dial-call img{width:30px;height:30px;}
@@ -634,18 +634,18 @@
         <div class="dial-del" id="dialDel"><img class="muted" src="assets/aosp_input_delete.png" alt=""></div>
       </div>
       <div class="keypad" id="keypad">
-        <button class="key" data-d="1"><span class="n">1</span></button>
-        <button class="key" data-d="2"><span class="n">2</span><span class="l">ABC</span></button>
-        <button class="key" data-d="3"><span class="n">3</span><span class="l">DEF</span></button>
-        <button class="key" data-d="4"><span class="n">4</span><span class="l">GHI</span></button>
-        <button class="key" data-d="5"><span class="n">5</span><span class="l">JKL</span></button>
-        <button class="key" data-d="6"><span class="n">6</span><span class="l">MNO</span></button>
-        <button class="key" data-d="7"><span class="n">7</span><span class="l">PQRS</span></button>
-        <button class="key" data-d="8"><span class="n">8</span><span class="l">TUV</span></button>
-        <button class="key" data-d="9"><span class="n">9</span><span class="l">WXYZ</span></button>
-        <button class="key" data-d="*"><span class="n">*</span></button>
-        <button class="key" data-d="0"><span class="n">0</span><span class="l">+</span></button>
-        <button class="key" data-d="#"><span class="n">#</span></button>
+        <img class="key" src="assets/dial_num_1_no_vm_wht.png" data-d="1" alt="1">
+        <img class="key" src="assets/dial_num_2_wht.png" data-d="2" alt="2">
+        <img class="key" src="assets/dial_num_3_wht.png" data-d="3" alt="3">
+        <img class="key" src="assets/dial_num_4_wht.png" data-d="4" alt="4">
+        <img class="key" src="assets/dial_num_5_wht.png" data-d="5" alt="5">
+        <img class="key" src="assets/dial_num_6_wht.png" data-d="6" alt="6">
+        <img class="key" src="assets/dial_num_7_wht.png" data-d="7" alt="7">
+        <img class="key" src="assets/dial_num_8_wht.png" data-d="8" alt="8">
+        <img class="key" src="assets/dial_num_9_wht.png" data-d="9" alt="9">
+        <img class="key" src="assets/dial_num_star_wht.png" data-d="*" alt="*">
+        <img class="key" src="assets/dial_num_0_no_plus_wht.png" data-d="0" alt="0">
+        <img class="key" src="assets/dial_num_pound_wht.png" data-d="#" alt="#">
       </div>
       <div class="dial-call" id="dialCall"><img class="muted" src="assets/ic_menu_call.png" alt=""></div>
     </div>
